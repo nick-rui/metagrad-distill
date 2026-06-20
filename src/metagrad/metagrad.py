@@ -71,6 +71,39 @@ def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
     return phi, tau
 
 
+@partial(jax.jit, static_argnums=(3, 4))
+def _phi_and_metagrad_gn(params0, seqs, val, cfg, T, lr=3e-5, b1=0.9, b2=0.999, eps=1e-8):
+    """Gradient-normalized metagradient (§2.14): inner update is
+    Σ wᵢ·(∇ℓᵢ/‖∇ℓᵢ‖) — normalize each example's gradient DIRECTION to unit norm so
+    high-loss/hard examples can't dominate by magnitude, while keeping directional
+    value. Needs per-example grads (vmap(grad)) → small k only. Returns (phi, tau)."""
+    k = seqs.shape[0]
+    w0 = jnp.ones(k, jnp.float32)
+
+    def one_loss(p, seq):
+        return M.loss_per_example(p, seq[None], cfg, False)[0]
+
+    def phi_of_w(w):
+        def step(carry, t):
+            p, m, v = carry
+            g_each = jax.vmap(lambda s: jax.grad(one_loss)(p, s))(seqs)         # [k,*param] leaves
+            sq = tree_map(lambda L: (L.reshape(k, -1) ** 2).sum(1), g_each)      # [k] per leaf
+            norm = jnp.sqrt(sum(jax.tree_util.tree_leaves(sq)) + 1e-12)          # [k] global per-ex
+            g_each = tree_map(lambda L: L / norm.reshape([k] + [1]*(L.ndim-1)), g_each)
+            g = tree_map(lambda L: jnp.tensordot(w, L, axes=([0], [0])) / k, g_each)
+            t1 = t + 1.0
+            m = tree_map(lambda m_, g_: b1*m_ + (1-b1)*g_, m, g)
+            v = tree_map(lambda v_, g_: b2*v_ + (1-b2)*g_*g_, v, g)
+            p = tree_map(lambda p_, m_, v_:
+                         p_ - lr*(m_/(1-b1**t1))/jnp.sqrt(v_/(1-b2**t1)+eps), p, m, v)
+            return (p, m, v), None
+        carry0 = (params0, _zeros_like(params0), _zeros_like(params0))
+        (pT, _, _), _ = jax.lax.scan(jax.checkpoint(step), carry0, jnp.arange(T, dtype=jnp.float32))
+        return M.loss_mean(pT, val, cfg, False)
+
+    return jax.value_and_grad(phi_of_w)(w0)
+
+
 @partial(jax.jit, static_argnums=(4, 5), static_argnames=("optimizer", "remat_blocks"))
 def phi_at_w(params0, seqs, val, w, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
              eps=1e-8, optimizer="adam", remat_blocks=False):
@@ -101,20 +134,25 @@ def phi_at_w(params0, seqs, val, w, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
 
 
 def metagrad_scores(params0, seqs, val, cfg, T=16, lr=1e-3, optimizer="adam",
-                    val_bs=256, L_inner=None, remat_blocks=False, wd=0.0, loss_clip=0.0, loss_pow=1.0):
+                    val_bs=256, L_inner=None, remat_blocks=False, wd=0.0, loss_clip=0.0,
+                    loss_pow=1.0, gradnorm=False):
     """seqs [k,L] int, val [V,L] int -> (s [k], phi float).
 
     s_i = -tau_i, higher = better (training on i lowers target loss more).
     L_inner truncates the per-sequence length used in BOTH the inner loop and
     Phi (logits are [k, L, vocab] — a major memory cost that L_inner cuts).
     ``wd`` = AdamW weight decay; ``loss_clip`` caps per-example loss (§2.13 levers).
+    ``gradnorm`` = per-example gradient-direction normalization (§2.14; small k only).
     """
     seqs = jnp.asarray(seqs, jnp.int32)
     val = jnp.asarray(val[:val_bs], jnp.int32)
     if L_inner is not None:
         seqs = seqs[:, :L_inner]
         val = val[:, :L_inner]
-    phi, tau = _phi_and_metagrad(params0, seqs, val, cfg, int(T), float(lr),
-                                 optimizer=optimizer, remat_blocks=remat_blocks,
-                                 wd=float(wd), loss_clip=float(loss_clip), loss_pow=float(loss_pow))
+    if gradnorm:
+        phi, tau = _phi_and_metagrad_gn(params0, seqs, val, cfg, int(T), float(lr))
+    else:
+        phi, tau = _phi_and_metagrad(params0, seqs, val, cfg, int(T), float(lr),
+                                     optimizer=optimizer, remat_blocks=remat_blocks,
+                                     wd=float(wd), loss_clip=float(loss_clip), loss_pow=float(loss_pow))
     return -np.asarray(tau, np.float64), float(phi)
