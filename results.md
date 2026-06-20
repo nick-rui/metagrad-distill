@@ -5,7 +5,7 @@
 
 **Project:** Distill an expensive metagradient data-quality oracle into a cheap classifier for data selection in continued pretraining (CPT). See `design_doc.md`.
 
-**Status:** ✅ Full pipeline run end-to-end (2026-06-20). H1/H3/H4/H5 supported; H2 honest-negative; flash-hog integrated + benchmarked.
+**Status:** ✅ Full pipeline + validation round (2026-06-20). Easy + hard corpora, cross-corpus transfer, soft-vs-hard. Core distillation validated; honest bounds documented (§2.7–2.9).
 
 ### Executive summary (2026-06-20)
 The core MGD claim **holds**: the expensive metagradient oracle (top-10% by oracle = 99.5% on-target, Cohen's d=+1.94) distills into a cheap forward-only classifier that reproduces it (**H1 ρ=0.72**), and selecting the classifier's top-10% gives a downstream CPT win (**H3: +8.02 ppl, 99% of the oracle's +8.09**), far above generic baselines (random +6.39, ppl-top +6.76). Aggregate ŝ also rank-predicts cohort lift perfectly (**H5 ρ=1.0**).
@@ -15,6 +15,14 @@ The core MGD claim **holds**: the expensive metagradient oracle (top-10% by orac
 **Biggest bug caught & fixed:** the original inner-lr=1e-3 destroyed the model in 16 steps and produced *noise* labels (corrupt scored highest); lr=3e-5 recovered clean ground-truth separation (§2.2).
 
 **flash-hog:** installs & runs on this CUDA-12.8 node, numerically faithful (ρ=0.9999 vs XLA) and ~11% faster, but doesn't lower the L_inner ceiling — the bottleneck is LM-head logits, not attention (§2.1).
+
+### Validation round (2026-06-20) — built the hard corpus the caveats demanded (§2.7–2.9)
+Built an **all-in-domain** corpus (`mgd_hard`: all PubMed; clusters `clean` / `repetitive` [lowest ppl, low value] / `noised` [clean-like features, low value]) to break the cheap baselines, plus two methodology probes. Verdict:
+
+1. **Distillation is robust even when surface cues mislead (✓ strong).** On `mgd_hard`, H1 ρ=**0.76**; the features-only classifier reproduces the oracle including assigning `noised` the lowest score (−0.95) *despite its 0.995 feature-cosine to target*. Downstream, classifier **+7.65 ≈ oracle +7.68** (99.6%).
+2. **Beats perplexity selection decisively; ties feature-similarity (honest).** `ppl_top` is *catastrophically* fooled — picks 100% `repetitive` and CPT **−53.9** (training on lowest-ppl data destroys the model), while MGD is robust. But `domain_match`/`ppl_corr` still **tie** MGD (~+7.7): whenever valuable data forms a *feature-identifiable* cluster, cheap feature matching finds it too. **MGD's value-add over feature-matching remains unproven** — it needs a corpus where value is *not* feature-aligned (redundancy / marginal-value structure).
+3. **Amortization works (✓).** A classifier trained on the *easy* corpus, applied to the *hard* corpus, selects 96.8% clean and gets **+7.58** (≈ native +7.65, oracle +7.68). The learned value-function transfers across corpora — "pay the oracle once, score elsewhere."
+4. **Soft weighting does NOT beat the hard cut (✗ for soft).** Using ŝ as a continuous per-sample weight (the oracle's literal form) at matched compute *underperforms* hard top-n: best soft +6.99 (sample, temp 0.6) vs hard **+7.65**; aggressive concentration (temp 0.1) overfits to **−88.8**. The hard include/exclude decision (uniform over a diverse top-n) is more robust than soft re-weighting here.
 
 ---
 
@@ -76,6 +84,50 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 - **Cheap base-ppl baseline:** ρ = −1.0, R² = 0.72 (lower mean base ppl → higher lift).
 
 **Honest read (same as H3):** ŝ predicts cohort lift perfectly by rank, but because these cohorts are built by monotonically varying domain purity, the cheap base-ppl baseline tracks lift just as well (better linear R²). H5 holds; it doesn't *beat* the cheap baseline on this construction. A cohort design that decorrelates "lift" from "base perplexity / domain purity" is what would isolate the metagradient's added value.
+
+---
+
+## 2.7 Decisive test — hard all-in-domain corpus (`mgd_hard`, 2026-06-20)
+Built to break the cheap baselines: **everything is PubMed**, so domain purity is useless, and value is decorrelated from the two cheap cues. Clusters (verified): `clean` (ppl 30.9, value), `repetitive` (a 16-tok window tiled → **ppl 1.6**, lowest, fools `ppl_top`), `noised` (20% tokens randomised → **feat-cos 0.995 to target**, fools `domain_match`). Target Φ = held-out clean PubMed. Relabeled at lr=3e-5.
+
+**Oracle (top-10% by label):** 96.2% clean / 2.3% repetitive / 1.5% noised — the metagradient avoids *both* traps despite repetitive's rock-bottom ppl and noised's clean-like features (cluster means clean +0.61 > repetitive +0.14 > noised −0.95).
+
+**H1 (distillation):** ρ=**0.76**, R²=0.60. Features-only classifier reproduces the oracle: pred clean +0.61 / repetitive +0.14 / **noised −0.95** — it down-ranks noised correctly from subtle feature signal alone.
+
+**H3 (downstream CPT, base ppl ~30.9):**
+
+| method | improvement | selection |
+|---|---|---|
+| ppl_corr | +7.78 | 100% clean |
+| domain_match | +7.68 | 100% clean |
+| **oracle** | +7.68 | 96% clean |
+| **classifier (ours)** | **+7.65** | 99% clean |
+| random | +6.56 | ~base |
+| length | +2.89 | 68% repetitive |
+| **ppl_top** | **−53.88** | **100% repetitive** |
+
+**Takeaways:** (1) classifier ≈ oracle (distillation robust under misleading cues ✓✓). (2) MGD **crushes `ppl_top`** — selecting the lowest-perplexity data is *actively catastrophic* (−53.9) and the metagradient is immune. (3) MGD still **ties** `domain_match`/`ppl_corr`: the valuable `clean` cluster is feature-separable (cos 0.999 vs noised 0.995), so feature matching also picks pure clean. **Conclusion: MGD beats perplexity-based selection decisively, but matching feature-similarity remains unbeaten — value-add over `domain_match` needs a non-feature-aligned value structure (redundancy/marginal value).**
+
+## 2.8 Amortization — cross-corpus transfer ✓ (2026-06-20)
+`scripts/cross_score.py`: train the classifier on one corpus' oracle labels, score the *other* corpus.
+
+- v1-classifier → `mgd_hard`: ranks clean +0.69 > repetitive +0.18 > noised −0.08 (correct order), selects **96.8% clean**, CPT **+7.58** ≈ native classifier +7.65 ≈ oracle +7.68.
+- hard-classifier → `mgd_v1`: ranks good +0.61 > offdomain +0.48 > corrupt −0.86 (correct order).
+
+The learned metagradient-value function **transfers across corpora** — supporting the "pay the oracle once, score everything cheaply forever" economics (the whole point of distillation).
+
+## 2.9 Soft weighting vs hard cut — hard cut wins ✗ for soft (2026-06-20)
+The oracle is defined w.r.t. a *continuous* weight `w_i`, so the "faithful" use of ŝ is soft per-sample weighting, not a hard top-n cut. `scripts/cpt_soft.py` tests this at **matched compute** (471 steps = the hard run) on `mgd_hard`: importance-sample / loss-weight the **full** corpus by `softmax(ŝ/temp)`.
+
+| variant | improvement | vs hard +7.65 |
+|---|---|---|
+| sample, temp 0.6 | +6.99 | worse |
+| lossweight, temp 0.3 | +5.17 | worse |
+| sample, temp 0.3 | −0.23 | much worse |
+| sample, temp 0.2 | −16.0 | collapse |
+| sample, temp 0.1 | −88.8 | collapse (overfit to a few top-ŝ seqs) |
+
+**No soft variant beats hard top-n.** Peaked weighting (low temp) over-concentrates on a handful of highest-ŝ sequences → overfit → ppl *explodes*; softening toward uniform just approaches `random` (+6.56). The hard include/exclude decision — uniform training over a *diverse* top-n pool — is the more robust use of the score. So in this pipeline MGD **decides which samples to include**, and that beats trying to use ŝ as a graded weight.
 
 ### 2.45 H2 — truncation does NOT transfer per-batch at the stable lr ⚠️ (2026-06-20)
 Per-batch Spearman ρ between truncated-T and the T=16 reference (k=32, 12 batches, lr=3e-5, each T scored in its own process — `scripts/h2_truncation.py`, since one process OOMs accumulating compiles across T):
