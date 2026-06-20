@@ -24,19 +24,21 @@ def _zeros_like(tree):
 
 @partial(jax.jit, static_argnums=(3, 4), static_argnames=("optimizer", "remat_blocks"))
 def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
-                      eps=1e-8, optimizer="adam", remat_blocks=False, wd=0.0):
+                      eps=1e-8, optimizer="adam", remat_blocks=False, wd=0.0, loss_clip=0.0):
     """Returns (phi, tau) where tau = d phi / d w at w=1.
 
-    ``wd`` adds AdamW-style decoupled weight decay to the inner loop. Strong wd
-    regularises the unrolled trajectory so high-gradient (e.g. hard/atypical)
-    examples can't dominate the short-horizon update -- a candidate fix for the
-    metagradient over-valuing hard data (results.md §2.11-2.12)."""
+    ``wd`` adds AdamW-style decoupled weight decay to the inner loop. ``loss_clip``
+    caps each sequence's per-example loss before the weighted sum, so high-loss
+    (hard/atypical) examples can't dominate the inner-loop gradient by magnitude --
+    a targeted fix for the metagradient over-valuing hard data (§2.11-2.13)."""
     k = seqs.shape[0]
     w0 = jnp.ones(k, jnp.float32)
 
     def phi_of_w(w):
         def wloss(p):
             pe = M.loss_per_example(p, seqs, cfg, remat_blocks)          # [k]
+            if loss_clip > 0:
+                pe = jnp.minimum(pe, loss_clip)                          # cap magnitude
             return jnp.sum(w * pe) / k
 
         def step(carry, t):
@@ -96,13 +98,13 @@ def phi_at_w(params0, seqs, val, w, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
 
 
 def metagrad_scores(params0, seqs, val, cfg, T=16, lr=1e-3, optimizer="adam",
-                    val_bs=256, L_inner=None, remat_blocks=False, wd=0.0):
+                    val_bs=256, L_inner=None, remat_blocks=False, wd=0.0, loss_clip=0.0):
     """seqs [k,L] int, val [V,L] int -> (s [k], phi float).
 
     s_i = -tau_i, higher = better (training on i lowers target loss more).
     L_inner truncates the per-sequence length used in BOTH the inner loop and
     Phi (logits are [k, L, vocab] — a major memory cost that L_inner cuts).
-    ``wd`` = AdamW weight decay in the inner loop (regularisation lever, §2.13).
+    ``wd`` = AdamW weight decay; ``loss_clip`` caps per-example loss (§2.13 levers).
     """
     seqs = jnp.asarray(seqs, jnp.int32)
     val = jnp.asarray(val[:val_bs], jnp.int32)
@@ -110,5 +112,6 @@ def metagrad_scores(params0, seqs, val, cfg, T=16, lr=1e-3, optimizer="adam",
         seqs = seqs[:, :L_inner]
         val = val[:, :L_inner]
     phi, tau = _phi_and_metagrad(params0, seqs, val, cfg, int(T), float(lr),
-                                 optimizer=optimizer, remat_blocks=remat_blocks, wd=float(wd))
+                                 optimizer=optimizer, remat_blocks=remat_blocks,
+                                 wd=float(wd), loss_clip=float(loss_clip))
     return -np.asarray(tau, np.float64), float(phi)

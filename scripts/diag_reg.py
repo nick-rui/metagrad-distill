@@ -15,7 +15,8 @@ from src.metagrad.metagrad import metagrad_scores
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", default="artifacts/data/mgd_diff")
-    ap.add_argument("--wd", type=float, required=True)
+    ap.add_argument("--wd", type=float, default=0.0)
+    ap.add_argument("--loss_clip", type=float, default=0.0)
     ap.add_argument("--T", type=int, default=16)
     ap.add_argument("--k", type=int, default=64)
     ap.add_argument("--lr", type=float, default=3e-5)
@@ -35,13 +36,13 @@ def main():
     for r in range(a.n_rounds):
         idx = rng.choice(Mtot, size=a.k, replace=False)
         s, phi = metagrad_scores(params, tok[idx], val, cfg, T=a.T, lr=a.lr,
-                                 val_bs=a.val_bs, L_inner=a.L_inner, wd=a.wd)
+                                 val_bs=a.val_bs, L_inner=a.L_inner, wd=a.wd, loss_clip=a.loss_clip)
         z = (s - s.mean()) / (s.std() + 1e-8)
         sum_s[idx] += z; cnt[idx] += 1; phis.append(float(phi))
     lab = np.where(cnt > 0, sum_s / np.maximum(cnt, 1), np.nan); cov = cnt > 0
     cm = {c: float(np.nanmean(lab[(clusters == c) & cov])) for c in ["easy", "mid", "hard"]}
     top = max(cm, key=cm.get)
-    out = dict(wd=a.wd, T=a.T, lr=a.lr, k=a.k, n_rounds=a.n_rounds,
+    out = dict(wd=a.wd, loss_clip=a.loss_clip, T=a.T, lr=a.lr, k=a.k, n_rounds=a.n_rounds,
                mean_phi=round(float(np.mean(phis)), 3), cluster_mean=cm,
                top_cluster=top, hard_minus_mid=round(cm["hard"] - cm["mid"], 4),
                sec=round(time.time() - t0, 1))
