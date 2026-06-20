@@ -96,7 +96,7 @@ def merge_shards(shard_paths, out_path, data_dir):
         mean_cnt=float(cnt[covered].mean()), min_cnt=int(cnt[covered].min()),
         max_cnt=int(cnt[covered].max()),
         label_by_cluster={c: float(np.nanmean(label[(clusters == c) & covered]))
-                          for c in ("good", "offdomain", "corrupt")},
+                          for c in sorted(set(clusters.tolist()))},
     )
     json.dump(summary, open(out_path.replace(".npz", "_summary.json"), "w"), indent=2)
     print("merged labels:", json.dumps(summary, indent=2), flush=True)

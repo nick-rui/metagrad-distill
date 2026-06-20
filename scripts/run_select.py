@@ -44,7 +44,7 @@ def main():
         sel = select_topn(sc, t_seq, args.budget_frac, higher_better=True,
                           feats=feats_for_dedup, dedup_thresh=args.dedup_thresh)
         np.savez(os.path.join(out_dir, f"{name}.npz"), sel=sel)
-        frac = {c: float((clusters[sel] == c).mean()) for c in ("good", "offdomain", "corrupt")}
+        frac = {c: float((clusters[sel] == c).mean()) for c in sorted(set(clusters.tolist()))}
         summary[name] = dict(n_sel=int(len(sel)), tokens=int(len(sel) * t_seq), cluster_frac=frac)
     # full-corpus upper bound = all sequences
     np.savez(os.path.join(out_dir, "full.npz"), sel=np.arange(len(tok)))

@@ -1,0 +1,25 @@
+{
+  "name": "mgd_hard",
+  "t_seq": 256,
+  "n_clean": 20000,
+  "n_repetitive": 15000,
+  "n_noised": 15000,
+  "n_val": 2000,
+  "rep_window": 16,
+  "noise_frac": 0.2,
+  "pubmed_docs": 150000,
+  "seed": 0,
+  "out_root": "artifacts/data",
+  "M": 50000,
+  "V": 2000,
+  "tokens_total": 12800000,
+  "pubmed_docs_used": 58936,
+  "cluster_counts": {
+    "clean": 20000,
+    "repetitive": 15000,
+    "noised": 15000
+  },
+  "vocab": "gpt2",
+  "eos_id": 50256,
+  "note": "all-in-domain; clean=value, repetitive=low-ppl-low-value, noised=cleanfeat-low-value"
+}
