@@ -42,6 +42,17 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 
 _(populated as experiments complete; newest first within each subsection)_
 
+### 2.3 Metagradient oracle quality (relabel @ lr=3e-5, 3200 rounds, 8×H100, 2026-06-20)
+Full Phase-1 labeling at the corrected lr. 49,168/50,000 seqs covered (mean 4.2 rounds each), ~23 min. The averaged z-scored oracle label separates the clusters almost perfectly:
+
+| cluster | mean label | top-10%-by-label share (corpus base) |
+|---|---|---|
+| good (PubMed) | **+0.709** | **99.5%** (40%) |
+| offdomain (C4) | −0.313 | 0.4% (40%) |
+| corrupt (shuffled) | −0.795 | 0.1% (20%) |
+
+Cohen's d(good−corrupt) = **+1.94**. I.e. selecting the top-10% of tokens by the metagradient oracle yields a near-pure PubMed set — the oracle is a strong, ground-truth-aligned data selector. This is the expensive signal the cheap classifier (H1) must now reproduce.
+
 ### 2.2 Inner-loop lr is decisive — metagradient only ranks data in the *stable* regime (2026-06-20)
 The first full labeling run (lr=1e-3, the original default) produced **near-noise labels**: cluster means good −0.002 / offdomain −0.002 / corrupt +0.008, i.e. corrupt (token-shuffled PubMed) scored *highest* and was 2× over-represented in the top-10% (Cohen's d good−corrupt = −0.02). Root cause: at lr=1e-3 the inner Adam loop **destroys the model in 16 steps** — val loss `phi` runs to 6.6–6.7 (ppl ~750) vs base GPT-2 PubMed loss 3.45 (ppl 31). The metagradient through a diverging trajectory measures catastrophic-forgetting dynamics dominated by the high-gradient corrupt sequences, not genuine data value.
 
