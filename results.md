@@ -24,7 +24,7 @@ Built an **all-in-domain** corpus (`mgd_hard`: all PubMed; clusters `clean` / `r
 
 **1b. The oracle is real (✓✓ foundational, §2.10).** Finite-difference check: Spearman(autodiff τ, black-box re-run τ) = **0.982**, sign-agreement 94%. The metagradient genuinely measures `∂Φ/∂wᵢ` — first ground-truth validation.
 
-**2b. Value-add over feature-matching: DISPROVEN on the corpus built to show it (⚠️ §2.11).** All-clean-PubMed stratified by difficulty (domain_match blind, ppl_top picks easy). The metagradient prefers `hard` data — but hard does *not* train better: **random/mid wins (+7.76)**, the oracle's hard-pick gets +7.73, and the classifier **underperforms random (+7.39)**. So the metagradient's one theoretical edge (marginal value) doesn't convert to a downstream win — it over-values high-gradient hard examples (echoing the lr pathology). **Honest conclusion: MGD matches cheap baselines when value is feature-aligned and *loses* to random when it isn't. The "breaks the Pareto frontier" claim is not supported.**
+**2b. Value-add over feature-matching: DISPROVEN with significance (⚠️ §2.11–2.12).** All-clean-PubMed stratified by difficulty (domain_match blind, ppl_top picks easy). The metagradient prefers `hard` data — but hard does *not* train better. Over **5 seeds** (std ~0.02): **random +7.77 > oracle +7.70 > domain_match +7.61 > classifier +7.39 > ppl_top +6.46**, and classifier−random = −0.37 ± 0.008 is **statistically significant**. Even the **full oracle significantly underperforms random** — so the signal itself, not just distillation, is miscalibrated for difficulty. **Honest conclusion: MGD matches cheap baselines when value is feature-aligned and *significantly loses to random* when it isn't. The "breaks the Pareto frontier" claim is not supported.**
 3. **Amortization works (✓).** A classifier trained on the *easy* corpus, applied to the *hard* corpus, selects 96.8% clean and gets **+7.58** (≈ native +7.65, oracle +7.68). The learned value-function transfers across corpora — "pay the oracle once, score elsewhere."
 4. **Weighting CAN match/beat the hard cut — if done right (✓, corrected).** Using ŝ for **relu-gated importance sampling** (zero below median, graded above) gives **+7.73**, edging the hard top-n cut (+7.65). But the form matters: *loss-weighting* uniform-sampled batches wastes compute on junk (+6.6), softmax-sampling overfits (−88.8 at low temp), and uniform full-corpus training (+6.84 ≈ random) shows you must concentrate. So "let the classifier weight each sample" works as **importance sampling**, not as naive per-sample loss weights (§2.9).
 
@@ -90,6 +90,25 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 **Honest read (same as H3):** ŝ predicts cohort lift perfectly by rank, but because these cohorts are built by monotonically varying domain purity, the cheap base-ppl baseline tracks lift just as well (better linear R²). H5 holds; it doesn't *beat* the cheap baseline on this construction. A cohort design that decorrelates "lift" from "base perplexity / domain purity" is what would isolate the metagradient's added value.
 
 ---
+
+## 2.12 Multi-seed significance — the negative result is REAL (2026-06-20)
+5 seeds per method on `mgd_diff` (seed varies CPT batch order); `scripts/multiseed_cpt.py`. Across-seed std is tiny (~0.02), so the §2.11 ordering is not noise:
+
+| method | improvement (mean ± std, n=5) |
+|---|---|
+| random | **+7.767 ± 0.016** |
+| oracle | +7.701 ± 0.023 |
+| domain_match | +7.608 ± 0.018 |
+| classifier (ours) | +7.394 ± 0.016 |
+| ppl_top | +6.459 ± 0.021 |
+
+Paired-by-seed differences (significant ⇔ |Δ| > 2·SEM):
+- classifier − random = **−0.373 ± 0.008** → **SIGNIFICANT** (MGD is *really* worse than random here)
+- classifier − oracle = −0.307 ± 0.016 → significant (distillation loss is real too)
+- classifier − domain_match = −0.214 ± 0.014 → significant
+- classifier − ppl_top = +0.935 ± 0.011 → significant (the one win — beats easy-selection)
+
+**Capstone finding:** even the **full metagradient oracle significantly underperforms random selection** (+7.70 vs +7.77) on this corpus — so this isn't a distillation artifact, the *signal itself* is miscalibrated for difficulty. The metagradient's preference for hard examples actively hurts downstream CPT, with significance. Multi-seed turns the §2.11 story from "looks bad" into "demonstrably bad."
 
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.

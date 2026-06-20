@@ -1,0 +1,125 @@
+{
+  "methods": {
+    "classifier": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "improvements": [
+        7.3896,
+        7.3742,
+        7.3855,
+        7.4051,
+        7.4153
+      ],
+      "mean": 7.39394497042818,
+      "std": 0.01628081301809317,
+      "n": 5
+    },
+    "oracle": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "improvements": [
+        7.728,
+        7.7017,
+        7.7142,
+        7.6907,
+        7.6685
+      ],
+      "mean": 7.700613856324241,
+      "std": 0.02272973226564567,
+      "n": 5
+    },
+    "domain_match": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "improvements": [
+        7.6093,
+        7.6208,
+        7.6094,
+        7.6242,
+        7.5786
+      ],
+      "mean": 7.608466182339063,
+      "std": 0.017989650206103228,
+      "n": 5
+    },
+    "random": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "improvements": [
+        7.7621,
+        7.7709,
+        7.7572,
+        7.7533,
+        7.7937
+      ],
+      "mean": 7.767437469112771,
+      "std": 0.016099533183249543,
+      "n": 5
+    },
+    "ppl_top": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "improvements": [
+        6.4689,
+        6.4489,
+        6.4707,
+        6.4276,
+        6.4792
+      ],
+      "mean": 6.459044996555773,
+      "std": 0.02080697158230174,
+      "n": 5
+    }
+  },
+  "classifier_vs": {
+    "classifier_minus_oracle": {
+      "mean_diff": -0.3067,
+      "sem": 0.0162,
+      "n": 5,
+      "significant": true
+    },
+    "classifier_minus_domain_match": {
+      "mean_diff": -0.2145,
+      "sem": 0.0138,
+      "n": 5,
+      "significant": true
+    },
+    "classifier_minus_random": {
+      "mean_diff": -0.3735,
+      "sem": 0.0078,
+      "n": 5,
+      "significant": true
+    },
+    "classifier_minus_ppl_top": {
+      "mean_diff": 0.9349,
+      "sem": 0.0112,
+      "n": 5,
+      "significant": true
+    }
+  }
+}
