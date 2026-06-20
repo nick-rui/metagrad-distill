@@ -127,6 +127,23 @@ updates; (2) WD shrinks weight magnitude, but the bias is from gradient magnitud
 (hard examples have big gradients). Targeted fixes instead: per-example gradient
 normalization, loss clipping, longer horizon (T=32 OOMs at 75GiB), or reducible-loss Phi.
 
+**Loss clipping DOES move it (the magnitude diagnosis confirmed).** Capping per-example
+loss before the weighted sum, sweep on mgd_diff:
+
+| clip | easy | mid | hard | prefers | hard-mid |
+|---|---|---|---|---|---|
+| none | -0.182 | +0.045 | +0.129 | hard | +0.084 |
+| **2.6** | -0.150 | +0.067 | +0.065 | **mid** | **-0.002** |
+| 2.9 | -0.337 | +0.138 | +0.174 | hard | +0.036 |
+| 3.2 | -0.523 | +0.172 | +0.315 | hard | +0.143 |
+
+At an aggressive cap (2.6, below all clusters' natural loss ~3.0-3.8) the oracle flips
+hard->mid -- so the bias really *is* gradient magnitude (clipping it works where WD
+didn't). But it's fragile: moderate clips (2.9-3.5) *increase* the hard-bias, and 2.6
+caps below all real losses. Full relabel of mgd_diff at clip=2.6 + multi-seed pending:
+the *ceiling* here is matching random (no selection beats random on a homogeneous-value
+corpus), so the test is "does the fix recover MGD from significantly-worse-than-random?"
+
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
 
