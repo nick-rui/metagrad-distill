@@ -162,9 +162,19 @@ tie — so the §2.11-2.12 failure was a **fixable gradient-magnitude miscalibra
 dead end. The diagnosis is confirmed *by the cure*. Caveat / new tradeoff: aggressively
 flattening the labels to de-bias them **collapses H1 to ρ=0.03** (was 0.37) — the signal
 becomes too flat to distill, so the classifier recovers only ~60% of its gap and still
-trails random. Net: clipping fixes the *oracle's* bias but starves the *classifier*; the
-principled next step is **per-example gradient normalization** — remove the magnitude bias
-*without* flattening the signal, so the oracle de-biases AND the labels stay distillable.
+trails random. Net: clipping fixes the *oracle's* bias but starves the *classifier*.
+
+**Why the cheap fixes all hit the same wall (loss_pow sweep).** A soft power-compression
+`pe**p` was tried as a gentler alternative to the hard clip. Result: only the aggressive
+`p=0.3` de-biases (hard−mid +0.002) and it **shrinks the easy→hard spread 0.31→0.17 just
+like the clip** (p=0.5/sqrt barely moves it; p=0.7 makes it *worse*). **Conclusion: the
+magnitude bias and the distillable signal are entangled** — any loss-*magnitude* transform
+that removes the hard-preference also flattens the value signal. They can only be decoupled
+at the **gradient level** (per-example gradient normalization — normalize direction, keep
+value elsewhere) or via a **different Φ** (reducible loss = base − holdout). The cheap
+loss-level levers (clip, pow) cannot do it. This is the honest stopping point of the
+quick-fix search: failure *diagnosed* (gradient magnitude) and *shown fixable* (oracle ties
+random under clipping), but a fix that preserves distillation needs gradient-level work.
 
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
