@@ -118,6 +118,26 @@ per-example grads cap k≈8, so production use needs k=8 + many rounds, or a mic
 accumulated implementation. **Bottom line: the principled fix behaves correctly in prototype —
 the first lever to de-bias without collapsing the easy/good separation.**
 
+**Full small-k gradnorm labeling (subset 8000 of mgd_diff, k=8, 4× coverage, 2026-06-20).**
+Wired gradnorm into labeling (`metagrad_scores(gradnorm=True)`, small-k `--subset`):
+
+- **✓✓ Distillability RECOVERED: H1 ρ=0.437** (clip=2.6 collapsed to 0.03; even above the
+  plain 0.37). Gradient normalization keeps the labels learnable — *this is the property
+  clipping destroyed*. Classifier preds recover the cluster order (easy −0.14 < mid +0.02
+  < hard +0.11).
+- **◐ Oracle partially de-biased:** gradnorm oracle selects hard 0.36 (vs plain 0.49) —
+  less hard-concentrated — but the 20-round proto's near-zero hard−mid was **noise**; at
+  full coverage the oracle still leans hard (label hard +0.142 > mid +0.038). So gradnorm
+  removed the *magnitude* component of the bias but a **directional** one remains (hard
+  examples genuinely align with short-horizon loss reduction — a horizon problem, not a
+  magnitude one). The distilled classifier still over-picks hard (0.46).
+
+**Reframed conclusion:** the failure decomposes into two biases — (1) *magnitude* (hard
+examples have big gradients) and (2) *directional/horizon* (hard examples help most in 16
+steps). **Gradient normalization fixes (1) and preserves distillability; it does not fix
+(2)** — that needs a longer horizon or a generalization-aware Φ. [Downstream multi-seed:
+pending.]
+
 ## 2.12 Multi-seed significance — the negative result is REAL (2026-06-20)
 5 seeds per method on `mgd_diff` (seed varies CPT batch order); `scripts/multiseed_cpt.py`. Across-seed std is tiny (~0.02), so the §2.11 ordering is not noise:
 
