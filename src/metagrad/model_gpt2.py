@@ -54,28 +54,49 @@ def _mlp(x, blk):
     return h @ blk["mlp_c_proj_w"] + blk["mlp_c_proj_b"]
 
 
-def forward(params, ids, cfg: GPT2Config):
-    """ids [B,T] int -> logits [B,T,vocab]."""
+def _block_fn(blk, x, n_head):
+    x = x + _attn(layernorm(x, blk["ln1_g"], blk["ln1_b"]), blk, n_head)
+    x = x + _mlp(layernorm(x, blk["ln2_g"], blk["ln2_b"]), blk)
+    return x
+
+
+def forward(params, ids, cfg: GPT2Config, remat_blocks: bool = True):
+    """ids [B,T] int -> logits [B,T,vocab].
+
+    With ``remat_blocks`` each transformer block is rematerialised: its
+    activations are recomputed in the backward pass instead of all 12 layers
+    being kept live. Essential for the unrolled metagradient to fit in memory.
+    """
     B, T = ids.shape
     x = params["wte"][ids] + params["wpe"][:T]
+    blk_fn = jax.checkpoint(_block_fn, static_argnums=(2,)) if remat_blocks else _block_fn
     for blk in params["blocks"]:
-        x = x + _attn(layernorm(x, blk["ln1_g"], blk["ln1_b"]), blk, cfg.n_head)
-        x = x + _mlp(layernorm(x, blk["ln2_g"], blk["ln2_b"]), blk)
+        x = blk_fn(blk, x, cfg.n_head)
     x = layernorm(x, params["lnf_g"], params["lnf_b"])
     return x @ params["wte"].T
 
 
-def loss_per_example(params, ids, cfg: GPT2Config):
+def loss_per_example(params, ids, cfg: GPT2Config, remat_blocks: bool = True):
     """Mean next-token CE per sequence -> [B]."""
-    logits = forward(params, ids, cfg)[:, :-1, :]
+    logits = forward(params, ids, cfg, remat_blocks)[:, :-1, :]
     tgt = ids[:, 1:]
     logp = jax.nn.log_softmax(logits.astype(jnp.float32), axis=-1)
     tok = jnp.take_along_axis(logp, tgt[..., None], axis=-1)[..., 0]  # [B,T-1]
     return -tok.mean(axis=-1)
 
 
-def loss_mean(params, ids, cfg: GPT2Config):
-    return loss_per_example(params, ids, cfg).mean()
+def loss_mean(params, ids, cfg: GPT2Config, remat_blocks: bool = True):
+    return loss_per_example(params, ids, cfg, remat_blocks).mean()
+
+
+def hidden_features(params, ids, cfg: GPT2Config):
+    """Mean-pooled final hidden state -> [B, d]. Cheap featurizer for the classifier."""
+    B, T = ids.shape
+    x = params["wte"][ids] + params["wpe"][:T]
+    for blk in params["blocks"]:
+        x = _block_fn(blk, x, cfg.n_head)
+    x = layernorm(x, params["lnf_g"], params["lnf_b"])
+    return x.mean(axis=1)
 
 
 # ---------------------------------------------------------------- params I/O

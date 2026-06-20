@@ -1,0 +1,42 @@
+[
+  {
+    "k": 8,
+    "T": 2,
+    "val_bs": 16,
+    "peak_gb": 13.5,
+    "compile_s": 48.0,
+    "round_s": 0.16,
+    "phi": 7.9308,
+    "s_finite": true
+  },
+  {
+    "k": 16,
+    "T": 2,
+    "val_bs": 16,
+    "peak_gb": 20.12,
+    "compile_s": 43.5,
+    "round_s": 0.26,
+    "phi": 7.9256,
+    "s_finite": true
+  },
+  {
+    "k": 8,
+    "T": 4,
+    "val_bs": 16,
+    "peak_gb": 20.12,
+    "compile_s": 42.7,
+    "round_s": 0.29,
+    "phi": 5.7479,
+    "s_finite": true
+  },
+  {
+    "k": 16,
+    "T": 4,
+    "val_bs": 16,
+    "peak_gb": 23.1,
+    "compile_s": 40.5,
+    "round_s": 0.49,
+    "phi": 5.7401,
+    "s_finite": true
+  }
+]
