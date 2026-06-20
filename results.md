@@ -30,7 +30,7 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 
 | ID | Hypothesis | Metric | Result |
 |---|---|---|---|
-| H1 | Cheap classifier predicts oracle metagradient scores | Spearman ρ(ŝ, s) | _pending_ |
+| H1 | Cheap classifier predicts oracle metagradient scores | Spearman ρ(ŝ, s) | **✓ ρ=0.72, R²=0.55** (held-out) |
 | H2 | Short inner loops preserve ranking | ρ(trunc-T, full-T) | _pending_ |
 | H3 | Top-n selection beats baselines, approaches oracle | held-out PubMed ppl | _pending_ |
 | H4 | Classifier is cheap + predictive (Pareto) | power vs cost | _pending_ |
@@ -41,6 +41,14 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 ## 2. Detailed results
 
 _(populated as experiments complete; newest first within each subsection)_
+
+### 2.4 H1 — the oracle distills into a cheap classifier ✓ (2026-06-20)
+LightGBM regressor over cheap features (base GPT-2 mean hidden state [768-d] + base-model loss), trained on 39,335 labeled seqs, tested on 9,833 held out:
+
+- **Spearman ρ(ŝ, oracle s) = 0.717**, R² = 0.545 (held-out).
+- Predicted scores recover the cluster ordering: good **+0.70** > offdomain **−0.31** > corrupt **−0.79** (cf. oracle +0.71 / −0.31 / −0.79 — nearly identical).
+
+So a forward-only classifier reproduces most of the expensive metagradient oracle's ranking power — the core premise of MGD. Cost: one GPT-2 forward pass per sequence vs a full unrolled-Adam metagradient.
 
 ### 2.3 Metagradient oracle quality (relabel @ lr=3e-5, 3200 rounds, 8×H100, 2026-06-20)
 Full Phase-1 labeling at the corrected lr. 49,168/50,000 seqs covered (mean 4.2 rounds each), ~23 min. The averaged z-scored oracle label separates the clusters almost perfectly:
