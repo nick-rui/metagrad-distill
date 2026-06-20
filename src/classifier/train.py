@@ -59,7 +59,7 @@ def train(features_path, labels_path, data_dir, out_dir, model_kind="lgbm",
 
     # does the classifier recover the good cluster? (mean predicted score per cluster)
     pred_by_cluster = {c: float(pred_all[clusters == c].mean())
-                       for c in ("good", "offdomain", "corrupt")}
+                       for c in sorted(set(clusters.tolist()))}
     res = dict(model=model_kind, n_train=len(train_idx), n_test=len(test_idx),
                H1_spearman=float(rho), H1_r2=r2, pred_by_cluster=pred_by_cluster)
     json.dump(res, open(os.path.join(out_dir, "h1.json"), "w"), indent=2)
