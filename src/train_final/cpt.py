@@ -101,7 +101,8 @@ if __name__ == "__main__":
     ap.add_argument("--eval_every_tokens", type=int, default=200_000)
     ap.add_argument("--wandb_group", default="cpt")
     ap.add_argument("--max_steps", type=int, default=None)
+    ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     cpt(args.sel, args.data_dir, args.out_dir, args.method, args.lr, args.bs,
-        args.epochs, args.eval_every_tokens, wandb_group=args.wandb_group,
+        args.epochs, args.eval_every_tokens, seed=args.seed, wandb_group=args.wandb_group,
         max_steps=args.max_steps)
