@@ -1,5 +1,6 @@
 # large run artifacts / data / checkpoints
 artifacts/**/*.npy
+artifacts/**/*.npz
 artifacts/**/*.bin
 artifacts/**/*.pt
 artifacts/**/*.msgpack
