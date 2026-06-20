@@ -33,7 +33,7 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 | H1 | Cheap classifier predicts oracle metagradient scores | Spearman ρ(ŝ, s) | **✓ ρ=0.72, R²=0.55** (held-out) |
 | H2 | Short inner loops preserve ranking | ρ(trunc-T, full-T) | _pending_ |
 | H3 | Top-n selection beats baselines, approaches oracle | held-out PubMed ppl | **✓ classifier +8.02 ≈ oracle +8.09; > all cheap baselines** |
-| H4 | Classifier is cheap + predictive (Pareto) | power vs cost | _pending_ |
+| H4 | Classifier is cheap + predictive (Pareto) | power vs cost | **✓ plot: `artifacts/report/b10/pareto.png`** (classifier ≈ oracle lift; per-eval cost = forward passes, oracle cost amortized one-time) |
 | H5 | Aggregate ŝ predicts cohort lift | held-out R²/ρ | _pending_ |
 
 ---
@@ -96,7 +96,17 @@ An lr sweep (`scripts/diag_lr.py`, 30 rounds each, k=64/T=16) shows a sharp tran
 ### 2.1 flash-hog higher-order attention (H2-enabler)
 - **flash-hog runs on this node** (2026-06-20): installed `flash-hog==0.6.0` into the cuda12 jax-env via `--no-deps` (its `pyproject` pins `jax[cuda13]`, which would *not* run on this driver-570 / CUDA-12.8 box; the Pallas kernel itself compiles fine against our existing `jax[cuda12]` 0.10.2). Verified the full higher-order path on an H100: forward → `bwd` → `bwd_fwd` → `bwd_bwd` all execute and return **finite** gradients, including a `grad(grad(...))` HVP test. vmap-batching works.
 - **Constraints found:** (1) the kernel routes through cuDNN fused attention → **bf16/fp16 only** (float32 q/k/v raises `NotImplementedError`); we cast q/k/v to bf16 inside attention and back. (2) API is per-sequence `[T, n_heads, head_dim]` (no batch dim) → we `vmap` over the batch. Integrated as an opt-in backend `GPT2Config.attn_impl="flashhog"` in `src/metagrad/model_gpt2.py`; default stays the validated float32 `xla` path.
-- **A/B vs XLA** (`scripts/bench_flashhog.py`): _pending_ — peak-memory / round-time at L_inner∈{128,256,512,1024} and Spearman ρ(s_xla, s_flashhog). Hypothesis: flash-hog's linear attention memory makes long-L_inner metagradients feasible where the float32 XLA path OOMs (XLA OOMs at L_inner=256 today).
+- **A/B vs XLA** (`scripts/bench_flashhog.py`, k=64, T=16, on one H100):
+
+  | L_inner | XLA peak / round | flash-hog peak / round | both fit? |
+  |---|---|---|---|
+  | 128 | 52.07 GB / 3.45 s | 52.78 GB / **3.06 s** | ✓ (phi 3.6213 vs 3.6214) |
+  | 256 | OOM (75 GiB alloc) | OOM (65 GiB alloc) | ✗ |
+  | 512 / 1024 | OOM | OOM | ✗ |
+
+  - **Numerical fidelity: ρ(s_xla, s_flashhog) = 0.9999** at L=128 — the bf16 higher-order kernel reproduces the float32 metagradient *ranking* essentially perfectly (and phi matches to 4 dp). This is the key safety result: swapping in flash-hog doesn't change the labels.
+  - **Speed:** ~11% faster per round at L=128 (3.06 vs 3.45 s).
+  - **Memory — the honest finding:** flash-hog's largest allocation is ~13% lower (65 vs 75 GiB), but **it does NOT unlock L≥256 at k=64.** Reason (predicted up front): for GPT-2 the memory ceiling is set by the **LM-head logits `[k, L, vocab=50257]`** and the unrolled-trajectory carries, *not* attention. flash-hog only shrinks the O(L²) attention term, which for a 50k-vocab model stays below the O(L·vocab) logits term until L>vocab (≈50k) — unreachable. So on this workload flash-hog is a faithful, modestly-faster drop-in, but realizing its long-context memory benefit would require *also* cutting the logits cost (chunked/online-softmax cross-entropy). [small-k L-scaling A/B: see §2.1b once `flashhog_smallk.json` lands.]
 
 ### 2.0 Sanity checks
 - **Fresh-env rebuild verified** (2026-06-20): both venvs rebuilt from scratch on a clean container per `ENV.md` (jax-env: jax 0.10.2 + 8 GPUs; ai-env: torch 2.10.0+cu128, CUDA on 8 devices). Corpus regenerated identically (M=50000, V=2000, 12.8M tokens). Metagrad unit test re-PASSED in the rebuilt env (good +0.93 > corrupt −0.92).

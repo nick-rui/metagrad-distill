@@ -1,0 +1,47 @@
+{
+  "rows": [
+    {
+      "method": "oracle",
+      "final_ppl": 21.952726249814425,
+      "improvement": 8.092713544676393,
+      "cost": 2400000
+    },
+    {
+      "method": "domain_match",
+      "final_ppl": 22.007315143930644,
+      "improvement": 8.038124650560174,
+      "cost": 50000
+    },
+    {
+      "method": "classifier",
+      "final_ppl": 22.02612603286471,
+      "improvement": 8.019313761626108,
+      "cost": 3250000
+    },
+    {
+      "method": "ppl_corr",
+      "final_ppl": 22.848730577875806,
+      "improvement": 7.196709216615012,
+      "cost": 50000
+    },
+    {
+      "method": "ppl_top",
+      "final_ppl": 23.28854637947964,
+      "improvement": 6.756893415011177,
+      "cost": 50000
+    },
+    {
+      "method": "random",
+      "final_ppl": 23.650987235401992,
+      "improvement": 6.394452559088826,
+      "cost": 1.0
+    },
+    {
+      "method": "length",
+      "final_ppl": 27.617992026971105,
+      "improvement": 2.4274477675197126,
+      "cost": 1.0
+    }
+  ],
+  "h1": null
+}

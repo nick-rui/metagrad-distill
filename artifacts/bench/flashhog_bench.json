@@ -1,0 +1,62 @@
+{
+  "rows": [
+    {
+      "attn": "xla",
+      "L_inner": 128,
+      "peak_gb": 52.07,
+      "compile_s": 58.1,
+      "round_s": 3.45,
+      "phi": 3.6213,
+      "s_finite": true
+    },
+    {
+      "attn": "flashhog",
+      "L_inner": 128,
+      "peak_gb": 52.78,
+      "compile_s": 32.1,
+      "round_s": 3.06,
+      "phi": 3.6214,
+      "s_finite": true
+    },
+    {
+      "attn": "xla",
+      "L_inner": 256,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 74.70GiB. [tf-allocat"
+    },
+    {
+      "attn": "flashhog",
+      "L_inner": 256,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 65.09GiB. [executable"
+    },
+    {
+      "attn": "xla",
+      "L_inner": 512,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 74.70GiB. [tf-allocat"
+    },
+    {
+      "attn": "flashhog",
+      "L_inner": 512,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 65.09GiB. [tf-allocat"
+    },
+    {
+      "attn": "xla",
+      "L_inner": 1024,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 74.70GiB. [tf-allocat"
+    },
+    {
+      "attn": "flashhog",
+      "L_inner": 1024,
+      "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 65.09GiB. [executable"
+    }
+  ],
+  "agreement": [
+    {
+      "L_inner": 128,
+      "spearman_xla_vs_flashhog": 0.9999,
+      "k": 64
+    }
+  ],
+  "k": 64,
+  "T": 16,
+  "val_bs": 128
+}
