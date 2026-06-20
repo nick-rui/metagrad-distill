@@ -1,42 +1,48 @@
 [
   {
-    "k": 8,
-    "T": 2,
-    "val_bs": 16,
-    "peak_gb": 13.5,
-    "compile_s": 48.0,
-    "round_s": 0.16,
-    "phi": 7.9308,
+    "k": 32,
+    "T": 16,
+    "L_inner": 128,
+    "val_bs": 128,
+    "peak_gb": 48.05,
+    "compile_s": 42.8,
+    "round_s": 1.82,
+    "phi": 7.5238,
     "s_finite": true
   },
   {
-    "k": 16,
-    "T": 2,
-    "val_bs": 16,
-    "peak_gb": 20.12,
-    "compile_s": 43.5,
-    "round_s": 0.26,
-    "phi": 7.9256,
+    "k": 64,
+    "T": 16,
+    "L_inner": 128,
+    "val_bs": 128,
+    "peak_gb": 52.07,
+    "compile_s": 40.2,
+    "round_s": 3.24,
+    "phi": 6.4199,
     "s_finite": true
   },
   {
-    "k": 8,
-    "T": 4,
-    "val_bs": 16,
-    "peak_gb": 20.12,
-    "compile_s": 42.7,
-    "round_s": 0.29,
-    "phi": 5.7479,
-    "s_finite": true
+    "k": 96,
+    "T": 16,
+    "L_inner": 128,
+    "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 6"
   },
   {
-    "k": 16,
-    "T": 4,
-    "val_bs": 16,
-    "peak_gb": 23.1,
-    "compile_s": 40.5,
-    "round_s": 0.49,
-    "phi": 5.7401,
-    "s_finite": true
+    "k": 64,
+    "T": 16,
+    "L_inner": 256,
+    "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 7"
+  },
+  {
+    "k": 96,
+    "T": 16,
+    "L_inner": 256,
+    "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 9"
+  },
+  {
+    "k": 128,
+    "T": 16,
+    "L_inner": 128,
+    "error": "JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 7"
   }
 ]

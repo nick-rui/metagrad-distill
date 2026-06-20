@@ -21,6 +21,7 @@ def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
     from src.metagrad import model_gpt2 as M
     from src.metagrad.metagrad import metagrad_scores
 
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     tok = np.load(os.path.join(data_dir, "tokens.npy"))      # uint16 [M,L]
     val = np.load(os.path.join(data_dir, "val.npy")).astype(np.int32)
     M_total = tok.shape[0]
