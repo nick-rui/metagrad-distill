@@ -1,0 +1,24 @@
+{
+  "name": "smoke",
+  "t_seq": 128,
+  "n_good": 200,
+  "n_offdomain": 200,
+  "n_corrupt": 100,
+  "n_val": 100,
+  "pubmed_docs": 4000,
+  "c4_docs": 3000,
+  "seed": 0,
+  "out_root": "artifacts/data",
+  "M": 500,
+  "V": 100,
+  "tokens_total": 64000,
+  "cluster_counts": {
+    "good": 200,
+    "offdomain": 200,
+    "corrupt": 100
+  },
+  "pubmed_docs_used": 187,
+  "c4_docs_used": 64,
+  "vocab": "gpt2",
+  "eos_id": 50256
+}

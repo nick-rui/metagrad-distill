@@ -15,16 +15,16 @@ Last updated: 2026-06-20 (initial).
 - [x] Research metagradient implementations (Engstrom 2025 REPLAY; Thrush 2026 DPG). Decide: direct unrolled `optax.adam` + `jax.grad` + `remat`.
 - [x] Repo scaffolding, TODO.md, results.md, README, ENV.md. Commit.
 
-## Phase 1 — Data pipeline (`src/data`)
-- [ ] Pick + verify datasets load (PubMed good, C4 offdomain). Fallbacks if unavailable.
-- [ ] Tokenize (GPT-2 BPE), chunk to `T_seq` sequences, build clusters.
-- [ ] Held-out PubMed target val set (disjoint from corpus).
-- [ ] Persist sequence store: token ids + metadata (`seq_id, cluster, n_tokens`). Report corpus stats.
+## Phase 1 — Data pipeline (`src/data`) — DONE
+- [x] Pick + verify datasets load (PubMed=MedRAG/pubmed, offdomain=allenai/c4).
+- [x] Tokenize (GPT-2 BPE), chunk to `T_seq=256`, build clusters {good,offdomain,corrupt}.
+- [x] Held-out PubMed target val set (2k seqs, disjoint).
+- [x] Persist store: `artifacts/data/mgd_v1/` — tokens.npy [50000,256], val.npy [2000,256], meta.csv, stats.json (12.8M tokens).
 
-## Phase 2 — Metagradient oracle (`src/metagrad`) — RISKIEST, build + unit-test first
-- [ ] Differentiable inner loop `A`: per-example weighted LM loss, unrolled `optax.adam` for `T` steps, `remat`.
-- [ ] `metagrad_scores(seqs, model_init, val, T, lr)` → `s = -tau`, `tau = grad(Φ_val, w)`.
-- [ ] **Unit test (toy: ~10 seqs, T=4, tiny model):** grads flow to `w`, finite; sign sanity (val-like seq scores > corrupted seq).
+## Phase 2 — Metagradient oracle (`src/metagrad`) — CORE VALIDATED
+- [x] Differentiable inner loop `A`: hand-rolled differentiable Adam, unrolled via `lax.scan`+`jax.checkpoint`.
+- [x] `metagrad_scores()` → `s=-tau`. Hand-wrote GPT-2 in JAX (transformers v5 dropped Flax); validated fwd vs ppl.
+- [x] **Unit test PASS:** grads flow to `w`, finite; good(+0.92) > corrupt(-0.91). Fixed NaN (eps-in-sqrt; mask=-1e9).
 - [ ] Memory/timing check at GPT-2 small, k=256/512, T=16.
 
 ## Phase 3 — Labeling loop (`src/labeling`)

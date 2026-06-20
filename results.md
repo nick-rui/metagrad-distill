@@ -42,7 +42,8 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 _(populated as experiments complete; newest first within each subsection)_
 
 ### 2.0 Sanity checks
-- _pending: metagradient unit test (gradient flow + sign sanity)._
+- **GPT-2 JAX forward validated** (2026-06-20): on held-out data, val(pubmed) ppl=32.2, good(pubmed)=31.2, offdomain(c4)=37.4, corrupt(shuffled)=4137. Correct ordering → the testbed has a clean ground truth (target=pubmed ⇒ good < offdomain ≪ corrupt in loss).
+- **Metagradient unit test PASS** (2026-06-20): tiny 2-layer model, T=4. `tau = ∂Φ/∂w` finite & non-zero; sign sanity holds — val-matching "good" seqs score +0.92 vs random "corrupt" −0.91 (good > corrupt). Fixes that mattered: eps *inside* Adam's `sqrt(v+eps)` (else 0·∞=NaN for zero-grad params), moderate attention mask value −1e9 (not `finfo.min`) for stable 2nd-order grad.
 
 ---
 
