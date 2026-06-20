@@ -14,6 +14,8 @@ The core MGD claim **holds**: the expensive metagradient oracle (top-10% by orac
 
 **Biggest bug caught & fixed:** the original inner-lr=1e-3 destroyed the model in 16 steps and produced *noise* labels (corrupt scored highest); lr=3e-5 recovered clean ground-truth separation (§2.2).
 
+**Root-cause of the value-add failure, decomposed (§2.13–2.14).** The metagradient's loss to random selection traces to two biases: **(1) magnitude** — hard examples have big gradients, so the metagradient conflates "big gradient" with "valuable"; and **(2) directional/horizon** — hard examples genuinely help most over a *16-step* proxy that ≠ a full run. **Per-example gradient normalization fixes (1)**: it de-biases the oracle to tie random AND keeps labels distillable (H1 0.44) — both of which the cheap loss-clip lever could not do together. **(2) remains** and is now the single well-defined blocker (needs a longer horizon or generalization-aware Φ). Weight decay and loss-clipping/compression were ruled out as fixes (wrong lever / entangle de-bias with flattening).
+
 **flash-hog:** installs & runs on this CUDA-12.8 node, numerically faithful (ρ=0.9999 vs XLA) and ~11% faster, but doesn't lower the L_inner ceiling — the bottleneck is LM-head logits, not attention (§2.1).
 
 ### Validation round (2026-06-20) — built the hard corpus the caveats demanded (§2.7–2.9)
@@ -132,11 +134,28 @@ Wired gradnorm into labeling (`metagrad_scores(gradnorm=True)`, small-k `--subse
   examples genuinely align with short-horizon loss reduction — a horizon problem, not a
   magnitude one). The distilled classifier still over-picks hard (0.46).
 
-**Reframed conclusion:** the failure decomposes into two biases — (1) *magnitude* (hard
-examples have big gradients) and (2) *directional/horizon* (hard examples help most in 16
-steps). **Gradient normalization fixes (1) and preserves distillability; it does not fix
-(2)** — that needs a longer horizon or a generalization-aware Φ. [Downstream multi-seed:
-pending.]
+**Downstream (multi-seed, n=5):** gradnorm **oracle +7.761 ± 0.017 ties random +7.767 ± 0.016**;
+classifier +7.524 ± 0.023 (classifier−random = −0.243 ± 0.015, sig). Gap progression
+plain **−0.373** → clip **−0.148** → gradnorm **−0.243**.
+
+The instructive twist: clip's classifier "did better" (−0.148) *only because its distillation
+failed* (H1=0.03 → near-random selection ≈ random result); gradnorm's classifier distills
+*faithfully* (H1=0.44), so it **inherits the oracle's residual hard-lean** and transmits it
+into a hard-leaning selection that loses to random. Faithful distillation of a still-biased
+oracle ≠ a good selector.
+
+**Reframed conclusion — the failure decomposes into two biases:**
+
+| bias | cause | gradnorm | needs |
+|---|---|---|---|
+| **magnitude** | hard examples have big gradients | **FIXED** → oracle ties random; H1 preserved (0.44) | — |
+| **directional/horizon** | hard examples help most in *16 steps* (≠ full run) | **not fixed** → oracle still leans hard; faithful classifier inherits it | longer horizon T or generalization-aware Φ |
+
+**Bottom line:** gradient normalization is the right fix for the *magnitude* half — it
+de-biases the oracle to tie random AND keeps the labels distillable (both of which clipping
+couldn't do together). The remaining classifier gap is now traced to a single, well-defined
+cause: a **myopia/horizon** bias in the oracle that gradnorm faithfully transmits. The
+method's last mile is a longer-horizon or reducible-loss Φ — not more magnitude control.
 
 ## 2.12 Multi-seed significance — the negative result is REAL (2026-06-20)
 5 seeds per method on `mgd_diff` (seed varies CPT batch order); `scripts/multiseed_cpt.py`. Across-seed std is tiny (~0.02), so the §2.11 ordering is not noise:
