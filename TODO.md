@@ -1,7 +1,12 @@
 # TODO — MetaGrad-Distill (MGD)
 
 Living checklist. I update this as I work: `[ ]` todo, `[~]` in progress, `[x]` done, `[!]` blocked/abandoned (with reason).
-Last updated: 2026-06-20 (initial).
+Last updated: 2026-06-20 (env rebuilt on fresh container; flash-hog integrated; labeling running).
+
+## flash-hog higher-order attention (added 2026-06-20)
+- [x] Install `flash-hog` on driver-570/CUDA-12.8 (via `--no-deps`, bypassing its `jax[cuda13]` pin). Verify fwd/bwd/bwd_bwd finite on H100.
+- [x] Wire opt-in backend `GPT2Config.attn_impl="flashhog"` (`_sdpa_flashhog`: bf16 + per-seq vmap). Default `xla` path unchanged + re-verified.
+- [ ] A/B bench vs XLA (`scripts/bench_flashhog.py`): peak-mem/time + ρ(s) at L_inner∈{128,256,512,1024}. Show long-L_inner feasibility (XLA OOMs at 256). → **H2 enabler**.
 
 ## Legend / conventions
 - Two envs: `/root/jax-env` (metagradients, JAX) and `/root/ai-env` (torch: eval, sentence features, vLLM).
@@ -24,11 +29,11 @@ Last updated: 2026-06-20 (initial).
 ## Phase 2 — Metagradient oracle (`src/metagrad`) — CORE VALIDATED
 - [x] Differentiable inner loop `A`: hand-rolled differentiable Adam, unrolled via `lax.scan`+`jax.checkpoint`.
 - [x] `metagrad_scores()` → `s=-tau`. Hand-wrote GPT-2 in JAX (transformers v5 dropped Flax); validated fwd vs ppl.
-- [x] **Unit test PASS:** grads flow to `w`, finite; good(+0.92) > corrupt(-0.91). Fixed NaN (eps-in-sqrt; mask=-1e9).
-- [ ] Memory/timing check at GPT-2 small, k=256/512, T=16.
+- [x] **Unit test PASS:** grads flow to `w`, finite; good(+0.92) > corrupt(-0.91). Fixed NaN (eps-in-sqrt; mask=-1e9). Re-PASSED in rebuilt env 2026-06-20.
+- [x] Memory/timing check (`FEASIBILITY.md`): k=64 fits (52GB), k≥96 / L_inner=256 OOM under XLA float32 → motivates flash-hog.
 
 ## Phase 3 — Labeling loop (`src/labeling`)
-- [ ] R rounds: reset model, sample k, zscore within round, average across rounds (~3–5x coverage). Persist `(seq_id, label)`.
+- [~] R rounds: reset model, sample k, zscore within round, average across rounds (~3–5x coverage). Persist `(seq_id, label)`. **Running 2026-06-20**: 3200 rounds across 8×H100, k=64/T=16/L_inner=128, ~4.1x coverage.
 - [ ] **Full-metagradient oracle** over all M (small scale) = gold standard for validation.
 
 ## Phase 4 — Classifier (`src/classifier`)
