@@ -151,13 +151,20 @@ hard +0.129 ≫ mid +0.045 — the hard-bias is gone), selection near-uniform
 | classifier | +7.616 | +7.390 | **+0.226** (recovers most of the gap) |
 | random | +7.762 | +7.762 | — |
 
-**The de-biasing works:** the oracle recovers from below-random to *matching* random —
-so the §2.11-2.12 failure was a **fixable gradient-magnitude miscalibration**, not a
-dead end. Caveat / new tradeoff: aggressively flattening the labels to de-bias them
-**collapses H1 to ρ=0.03** (was 0.37) — the signal becomes too flat to distill, so the
-classifier (+7.616) recovers less than the oracle and still trails random. Net: clipping
-fixes the *oracle's* bias but starves the *classifier*; a softer de-biaser (per-example
-grad-norm) that removes the magnitude bias without flattening the signal is the next step.
+**Multi-seed confirmation (n=5):** oracle **+7.768 ± 0.009** vs random **+7.767 ± 0.016**
+— a +0.001 difference, i.e. the oracle now **statistically ties random** (vs −0.07
+significantly-below pre-fix). classifier **+7.620 ± 0.023**; classifier−random =
+**−0.148 ± 0.016** (still significant) but the gap **more than halved** from the pre-fix
+−0.373 ± 0.008.
+
+**The de-biasing works:** the oracle recovers from significantly-below-random to a dead-on
+tie — so the §2.11-2.12 failure was a **fixable gradient-magnitude miscalibration**, not a
+dead end. The diagnosis is confirmed *by the cure*. Caveat / new tradeoff: aggressively
+flattening the labels to de-bias them **collapses H1 to ρ=0.03** (was 0.37) — the signal
+becomes too flat to distill, so the classifier recovers only ~60% of its gap and still
+trails random. Net: clipping fixes the *oracle's* bias but starves the *classifier*; the
+principled next step is **per-example gradient normalization** — remove the magnitude bias
+*without* flattening the signal, so the oracle de-biases AND the labels stay distillable.
 
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
