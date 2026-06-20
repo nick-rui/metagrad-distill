@@ -28,6 +28,24 @@ artifacts/     run outputs (gitignored where large)
 
 See [`ENV.md`](ENV.md) for the why behind versions (driver-570 / cu128 constraint).
 
+## Pipeline (reproduce)
+```bash
+J=/root/jax-env/bin/python ; A=/root/ai-env/bin/python      # jax / torch envs
+# 0. data
+$A -m src.data.corpus --name mgd_v1 --t_seq 256 --n_good 20000 --n_offdomain 20000 --n_corrupt 10000 --n_val 2000
+# 1. metagradient labeling (8 GPUs, ~22 min)
+$J -m scripts.run_label --total_rounds 3200 --k 64 --T 16 --L_inner 128 --tag main --wandb
+# 2. features + classifier (H1)
+$J -m src.classifier.featurize --out_path artifacts/features/mgd_v1.npz
+$A -m src.classifier.train --labels artifacts/labels/main/labels.npz --out_dir artifacts/clf/main --model lgbm --wandb
+# 3. selection (all methods) + final CPT (H3) + report (Pareto, efficiency curves)
+$A -m scripts.run_select --labels artifacts/labels/main/labels.npz --pred artifacts/clf/main/pred.npz --tag b10 --budget_frac 0.10
+$A -m scripts.run_cpt_all --select_dir artifacts/select/b10 --out_dir artifacts/cpt/b10
+# 4. ablations
+$J -m src.eval.truncation --wandb           # H2 truncation
+$A -m scripts.run_cohorts --pred artifacts/clf/main/pred.npz   # H5 cohort lift
+```
+
 ## References
 - Engstrom et al. 2025, *Optimizing ML Training with Metagradient Descent* (REPLAY), arXiv:2503.13751
 - Thrush et al. 2026, *Synthetic Data for any Differentiable Target* (DPG), arXiv:2604.08423
