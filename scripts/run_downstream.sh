@@ -7,7 +7,10 @@ cd "$(dirname "$0")/.."
 J=/root/jax-env/bin/python
 A=/root/ai-env/bin/python
 export HF_HOME=/root/hf_cache
-export WANDB_MODE=disabled          # cpt.py calls wandb.init() unconditionally
+# wandb ENABLED for CPT: the val-ppl-vs-tokens efficiency curves (our method vs
+# baselines) are a required deliverable. featurize doesn't log; classifier only with --wandb.
+# Auth comes from ~/.netrc (set once via `wandb login`); no key in the repo.
+export WANDB_PROJECT=metagrad-distill
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export TOKENIZERS_PARALLELISM=false

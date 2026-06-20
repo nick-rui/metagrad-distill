@@ -1,0 +1,18 @@
+{
+  "wd": 0.0,
+  "loss_clip": 0.0,
+  "loss_pow": 0.5,
+  "T": 16,
+  "lr": 3e-05,
+  "k": 64,
+  "n_rounds": 40,
+  "mean_phi": 3.467,
+  "cluster_mean": {
+    "easy": -0.1869966836635769,
+    "mid": 0.05252242521524208,
+    "hard": 0.12367519544613227
+  },
+  "top_cluster": "hard",
+  "hard_minus_mid": 0.0712,
+  "sec": 177.6
+}

@@ -1,0 +1,22 @@
+{
+  "name": "mgd_diff",
+  "t_seq": 256,
+  "M": 50000,
+  "V": 2000,
+  "tokens_total": 12800000,
+  "pubmed_docs_used": 61930,
+  "cluster_counts": {
+    "easy": 16666,
+    "mid": 16666,
+    "hard": 16668
+  },
+  "base_ppl_by_cluster": {
+    "easy": 20.18147850036621,
+    "mid": 30.468843460083008,
+    "hard": 44.18460464477539
+  },
+  "trim_top": 0.01,
+  "vocab": "gpt2",
+  "eos_id": 50256,
+  "note": "all clean PubMed, stratified by base GPT-2 loss; tests marginal-value/difficulty"
+}

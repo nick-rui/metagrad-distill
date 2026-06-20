@@ -17,6 +17,9 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--L_inner", type=int, default=128)
     ap.add_argument("--val_bs", type=int, default=128)
+    ap.add_argument("--loss_clip", type=float, default=0.0)
+    ap.add_argument("--gradnorm", action="store_true")
+    ap.add_argument("--subset", type=int, default=0)
     ap.add_argument("--data_dir", default="artifacts/data/mgd_v1")
     ap.add_argument("--tag", default="main")
     ap.add_argument("--n_gpus", type=int, default=8)
@@ -38,7 +41,10 @@ def main():
                "--out_path", sp, "--data_dir", args.data_dir,
                "--n_rounds", str(per), "--k", str(args.k), "--T", str(args.T),
                "--lr", str(args.lr), "--L_inner", str(args.L_inner),
-               "--val_bs", str(args.val_bs), "--seed", str(1000 + g)]
+               "--val_bs", str(args.val_bs), "--seed", str(1000 + g),
+               "--loss_clip", str(args.loss_clip), "--subset", str(args.subset)]
+        if args.gradnorm:
+            cmd += ["--gradnorm"]
         if args.wandb:
             cmd += ["--wandb", "--wandb_group", f"labeling-{args.tag}"]
         log = open(os.path.join(out_dir, f"shard{g}.log"), "w")

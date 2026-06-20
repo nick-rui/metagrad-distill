@@ -1,0 +1,69 @@
+{
+  "budget_frac": 0.1,
+  "t_seq": 256,
+  "methods": {
+    "random": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.3338,
+        "hard": 0.3376,
+        "mid": 0.3286
+      }
+    },
+    "length": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.5622,
+        "hard": 0.1778,
+        "mid": 0.26
+      }
+    },
+    "ppl_top": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 1.0,
+        "hard": 0.0,
+        "mid": 0.0
+      }
+    },
+    "domain_match": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.1822,
+        "hard": 0.4012,
+        "mid": 0.4166
+      }
+    },
+    "ppl_corr": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.0,
+        "hard": 0.0,
+        "mid": 1.0
+      }
+    },
+    "oracle": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.2012,
+        "hard": 0.4852,
+        "mid": 0.3136
+      }
+    },
+    "classifier": {
+      "n_sel": 5000,
+      "tokens": 1280000,
+      "cluster_frac": {
+        "easy": 0.1608,
+        "hard": 0.5606,
+        "mid": 0.2786
+      }
+    }
+  }
+}

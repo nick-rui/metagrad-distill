@@ -23,8 +23,12 @@ artifacts/     run outputs (gitignored where large)
 ```
 
 ## Environments
-- **`/root/jax-env`** — JAX 0.10.2 + flax + optax. Used for metagradients. `JAX` because differentiating through training is far easier/cheaper here.
-- **`/root/ai-env`** — PyTorch 2.10 (cu128) + transformers + vLLM. Used for eval, featurization, final CPT.
+- **`/root/jax-env`** — JAX 0.10.2 + flax + optax (+ `flash-hog` for higher-order attention). Used for metagradients. `JAX` because differentiating through training is far easier/cheaper here.
+- **`/root/ai-env`** — PyTorch 2.10 (cu128) + transformers. Used for eval, featurization, final CPT.
+
+> **flash-hog** (higher-order Flash-Attention kernel) is integrated as an opt-in attention backend: `GPT2Config.attn_impl="flashhog"`. We install the **fork [`kesavanramakrishnan/flash-hog`](https://github.com/kesavanramakrishnan/flash-hog)** via `uv pip install --no-deps "git+https://github.com/kesavanramakrishnan/flash-hog.git" chex jaxtyping toolz einops wadler_lindig` (bypasses its `jax[cuda13]` pin; Pallas is the default backend, so it imports/runs on this CUDA-12.8 node). It's numerically faithful (ρ=0.9999 vs XLA) and ~11% faster, but does **not** lower the L_inner ceiling here — the bottleneck is the LM-head logits, not attention (results.md §2.1). A/B: `python -m scripts.bench_flashhog`.
+>
+> The fork also ships faster **ThunderKittens** double-backward kernels (long-seq win, up to ~1.3×+). They are vendored under [`third_party/flash_hog_tk/`](third_party/flash_hog_tk/) but **kept inactive** — we run the Pallas path. TK needs an `nvcc≥13`/CUDA-13 build, which exceeds this node's CUDA 12.8; see that folder's README to activate.
 
 See [`ENV.md`](ENV.md) for the why behind versions (driver-570 / cu128 constraint).
 
@@ -33,8 +37,9 @@ See [`ENV.md`](ENV.md) for the why behind versions (driver-570 / cu128 constrain
 J=/root/jax-env/bin/python ; A=/root/ai-env/bin/python      # jax / torch envs
 # 0. data
 $A -m src.data.corpus --name mgd_v1 --t_seq 256 --n_good 20000 --n_offdomain 20000 --n_corrupt 10000 --n_val 2000
-# 1. metagradient labeling (8 GPUs, ~22 min)
-$J -m scripts.run_label --total_rounds 3200 --k 64 --T 16 --L_inner 128 --tag main --wandb
+# 1. metagradient labeling (8 GPUs, ~22 min). lr=3e-5 is REQUIRED — at 1e-3 the
+#    inner loop diverges and labels become noise (see results.md §2.2).
+$J -m scripts.run_label --total_rounds 3200 --k 64 --T 16 --lr 3e-5 --L_inner 128 --tag main
 # 2. features + classifier (H1)
 $J -m src.classifier.featurize --out_path artifacts/features/mgd_v1.npz
 $A -m src.classifier.train --labels artifacts/labels/main/labels.npz --out_dir artifacts/clf/main --model lgbm --wandb

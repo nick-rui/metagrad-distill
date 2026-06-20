@@ -24,21 +24,31 @@ def _zeros_like(tree):
 
 @partial(jax.jit, static_argnums=(3, 4), static_argnames=("optimizer", "remat_blocks"))
 def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
-                      eps=1e-8, optimizer="adam", remat_blocks=False):
-    """Returns (phi, tau) where tau = d phi / d w at w=1."""
+                      eps=1e-8, optimizer="adam", remat_blocks=False, wd=0.0, loss_clip=0.0, loss_pow=1.0):
+    """Returns (phi, tau) where tau = d phi / d w at w=1.
+
+    ``wd`` adds AdamW-style decoupled weight decay to the inner loop. ``loss_clip``
+    caps each sequence's per-example loss before the weighted sum, so high-loss
+    (hard/atypical) examples can't dominate the inner-loop gradient by magnitude --
+    a targeted fix for the metagradient over-valuing hard data (§2.11-2.13)."""
     k = seqs.shape[0]
     w0 = jnp.ones(k, jnp.float32)
 
     def phi_of_w(w):
         def wloss(p):
             pe = M.loss_per_example(p, seqs, cfg, remat_blocks)          # [k]
+            cap = jnp.where(loss_clip > 0, loss_clip, jnp.inf)           # traced-safe
+            pe = jnp.minimum(pe, cap)                                    # hard cap (no-op if clip<=0)
+            # soft compression pe**loss_pow (loss_pow<1 de-emphasises high-loss/hard
+            # examples *gently*, vs the hard clip — de-bias without flattening). 1.0=off.
+            pe = jnp.where(loss_pow != 1.0, jnp.power(jnp.maximum(pe, 1e-6), loss_pow), pe)
             return jnp.sum(w * pe) / k
 
         def step(carry, t):
             p, m, v = carry
             g = jax.grad(wloss)(p)
             if optimizer == "sgd":
-                p = tree_map(lambda p_, g_: p_ - lr * g_, p, g)
+                p = tree_map(lambda p_, g_: p_ - lr * (g_ + wd * p_), p, g)
                 return (p, m, v), None
             t1 = t + 1.0
             m = tree_map(lambda m_, g_: b1 * m_ + (1 - b1) * g_, m, g)
@@ -47,8 +57,9 @@ def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
             bc2 = 1 - b2 ** t1
             # eps INSIDE the sqrt: d/dx sqrt(x) -> inf at x=0, so for params with
             # zero grad (v=0) the metagradient (a 2nd-order grad) would be 0*inf=NaN.
+            # AdamW decoupled decay (wd*p) added to the update.
             p = tree_map(lambda p_, m_, v_:
-                         p_ - lr * (m_ / bc1) / jnp.sqrt(v_ / bc2 + eps), p, m, v)
+                         p_ - lr * ((m_ / bc1) / jnp.sqrt(v_ / bc2 + eps) + wd * p_), p, m, v)
             return (p, m, v), None
 
         carry0 = (params0, _zeros_like(params0), _zeros_like(params0))
@@ -60,19 +71,88 @@ def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
     return phi, tau
 
 
+@partial(jax.jit, static_argnums=(3, 4))
+def _phi_and_metagrad_gn(params0, seqs, val, cfg, T, lr=3e-5, b1=0.9, b2=0.999, eps=1e-8):
+    """Gradient-normalized metagradient (§2.14): inner update is
+    Σ wᵢ·(∇ℓᵢ/‖∇ℓᵢ‖) — normalize each example's gradient DIRECTION to unit norm so
+    high-loss/hard examples can't dominate by magnitude, while keeping directional
+    value. Needs per-example grads (vmap(grad)) → small k only. Returns (phi, tau)."""
+    k = seqs.shape[0]
+    w0 = jnp.ones(k, jnp.float32)
+
+    def one_loss(p, seq):
+        return M.loss_per_example(p, seq[None], cfg, False)[0]
+
+    def phi_of_w(w):
+        def step(carry, t):
+            p, m, v = carry
+            g_each = jax.vmap(lambda s: jax.grad(one_loss)(p, s))(seqs)         # [k,*param] leaves
+            sq = tree_map(lambda L: (L.reshape(k, -1) ** 2).sum(1), g_each)      # [k] per leaf
+            norm = jnp.sqrt(sum(jax.tree_util.tree_leaves(sq)) + 1e-12)          # [k] global per-ex
+            g_each = tree_map(lambda L: L / norm.reshape([k] + [1]*(L.ndim-1)), g_each)
+            g = tree_map(lambda L: jnp.tensordot(w, L, axes=([0], [0])) / k, g_each)
+            t1 = t + 1.0
+            m = tree_map(lambda m_, g_: b1*m_ + (1-b1)*g_, m, g)
+            v = tree_map(lambda v_, g_: b2*v_ + (1-b2)*g_*g_, v, g)
+            p = tree_map(lambda p_, m_, v_:
+                         p_ - lr*(m_/(1-b1**t1))/jnp.sqrt(v_/(1-b2**t1)+eps), p, m, v)
+            return (p, m, v), None
+        carry0 = (params0, _zeros_like(params0), _zeros_like(params0))
+        (pT, _, _), _ = jax.lax.scan(jax.checkpoint(step), carry0, jnp.arange(T, dtype=jnp.float32))
+        return M.loss_mean(pT, val, cfg, False)
+
+    return jax.value_and_grad(phi_of_w)(w0)
+
+
+@partial(jax.jit, static_argnums=(4, 5), static_argnames=("optimizer", "remat_blocks"))
+def phi_at_w(params0, seqs, val, w, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
+             eps=1e-8, optimizer="adam", remat_blocks=False):
+    """Φ(w): run the SAME inner loop at an explicit weight vector w (not w=1).
+    Used to finite-difference ∂Φ/∂w_i and check it against the autodiff τ."""
+    k = seqs.shape[0]
+
+    def wloss(p):
+        pe = M.loss_per_example(p, seqs, cfg, remat_blocks)
+        return jnp.sum(w * pe) / k
+
+    def step(carry, t):
+        p, m, v = carry
+        g = jax.grad(wloss)(p)
+        if optimizer == "sgd":
+            return (tree_map(lambda p_, g_: p_ - lr * g_, p, g), m, v), None
+        t1 = t + 1.0
+        m = tree_map(lambda m_, g_: b1 * m_ + (1 - b1) * g_, m, g)
+        v = tree_map(lambda v_, g_: b2 * v_ + (1 - b2) * g_ * g_, v, g)
+        p = tree_map(lambda p_, m_, v_:
+                     p_ - lr * (m_ / (1 - b1 ** t1)) / jnp.sqrt(v_ / (1 - b2 ** t1) + eps),
+                     p, m, v)
+        return (p, m, v), None
+
+    carry0 = (params0, _zeros_like(params0), _zeros_like(params0))
+    (pT, _, _), _ = jax.lax.scan(jax.checkpoint(step), carry0, jnp.arange(T, dtype=jnp.float32))
+    return M.loss_mean(pT, val, cfg, remat_blocks)
+
+
 def metagrad_scores(params0, seqs, val, cfg, T=16, lr=1e-3, optimizer="adam",
-                    val_bs=256, L_inner=None, remat_blocks=False):
+                    val_bs=256, L_inner=None, remat_blocks=False, wd=0.0, loss_clip=0.0,
+                    loss_pow=1.0, gradnorm=False):
     """seqs [k,L] int, val [V,L] int -> (s [k], phi float).
 
     s_i = -tau_i, higher = better (training on i lowers target loss more).
     L_inner truncates the per-sequence length used in BOTH the inner loop and
     Phi (logits are [k, L, vocab] — a major memory cost that L_inner cuts).
+    ``wd`` = AdamW weight decay; ``loss_clip`` caps per-example loss (§2.13 levers).
+    ``gradnorm`` = per-example gradient-direction normalization (§2.14; small k only).
     """
     seqs = jnp.asarray(seqs, jnp.int32)
     val = jnp.asarray(val[:val_bs], jnp.int32)
     if L_inner is not None:
         seqs = seqs[:, :L_inner]
         val = val[:, :L_inner]
-    phi, tau = _phi_and_metagrad(params0, seqs, val, cfg, int(T), float(lr),
-                                 optimizer=optimizer, remat_blocks=remat_blocks)
+    if gradnorm:
+        phi, tau = _phi_and_metagrad_gn(params0, seqs, val, cfg, int(T), float(lr))
+    else:
+        phi, tau = _phi_and_metagrad(params0, seqs, val, cfg, int(T), float(lr),
+                                     optimizer=optimizer, remat_blocks=remat_blocks,
+                                     wd=float(wd), loss_clip=float(loss_clip), loss_pow=float(loss_pow))
     return -np.asarray(tau, np.float64), float(phi)

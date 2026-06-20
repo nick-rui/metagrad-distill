@@ -1,0 +1,18 @@
+{
+  "lr": 0.0001,
+  "T": 16,
+  "k": 64,
+  "n_rounds": 30,
+  "base_pubmed_val_loss": 3.45,
+  "mean_phi": 4.0,
+  "phi_first": 3.994,
+  "phi_last": 4.034,
+  "cluster_mean": {
+    "good": -0.7773629950197238,
+    "offdomain": -0.032570708071492906,
+    "corrupt": 1.6229061381475658
+  },
+  "cohens_d_good_minus_corrupt": -4.3492,
+  "covered": 1887,
+  "sec": 144.9
+}

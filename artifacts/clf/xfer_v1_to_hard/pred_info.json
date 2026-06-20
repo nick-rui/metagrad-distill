@@ -1,0 +1,11 @@
+{
+  "train_feats": "artifacts/features/mgd_v1.npz",
+  "score_feats": "artifacts/features/hard.npz",
+  "n_train": 49168,
+  "n_scored": 50000,
+  "pred_by_cluster": {
+    "clean": 0.691947877407074,
+    "noised": -0.08253230899572372,
+    "repetitive": 0.18424557149410248
+  }
+}

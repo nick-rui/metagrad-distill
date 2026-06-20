@@ -1,0 +1,17 @@
+{
+  "normalize": false,
+  "k": 8,
+  "L_inner": 64,
+  "T": 8,
+  "n_rounds": 20,
+  "mean_phi": 3.831,
+  "cluster_mean": {
+    "easy": -0.28086264005645545,
+    "mid": -0.040306059817091844,
+    "hard": 0.2996667648397777
+  },
+  "top_cluster": "hard",
+  "hard_minus_mid": 0.34,
+  "spread": 0.5805,
+  "sec": 60.8
+}
