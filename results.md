@@ -110,6 +110,23 @@ Paired-by-seed differences (significant ⇔ |Δ| > 2·SEM):
 
 **Capstone finding:** even the **full metagradient oracle significantly underperforms random selection** (+7.70 vs +7.77) on this corpus — so this isn't a distillation artifact, the *signal itself* is miscalibrated for difficulty. The metagradient's preference for hard examples actively hurts downstream CPT, with significance. Multi-seed turns the §2.11 story from "looks bad" into "demonstrably bad."
 
+## 2.13 Weight decay does NOT de-bias the oracle (2026-06-20)
+Tested the L2/weight-decay hypothesis for the §2.11-2.12 failure (oracle over-values
+hard data). Swept inner-loop AdamW wd on mgd_diff (40 rounds each):
+
+| wd | easy | mid | hard | hard-mid |
+|---|---|---|---|---|
+| 0.0 | -0.182 | +0.045 | +0.129 | +0.084 |
+| 0.01 | -0.182 | +0.045 | +0.129 | +0.084 |
+| 0.1 | -0.182 | +0.044 | +0.130 | +0.085 |
+| 0.5 | -0.182 | +0.044 | +0.130 | +0.086 |
+
+**No effect** — hard-preference unchanged across wd 0->0.5 (phi flat at 3.48). Two
+reasons: (1) at lr=3e-5 over T=16, the decay term lr*wd*p is negligible vs the
+updates; (2) WD shrinks weight magnitude, but the bias is from gradient magnitude
+(hard examples have big gradients). Targeted fixes instead: per-example gradient
+normalization, loss clipping, longer horizon (T=32 OOMs at 75GiB), or reducible-loss Phi.
+
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
 
