@@ -91,6 +91,33 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 
 ---
 
+## 2.14 Per-example gradient normalization — the principled fix works (prototype, 2026-06-20) ✓
+The §2.13 levers (clip, pow) de-bias only by flattening *all* loss magnitudes. The principled
+alternative: normalize each example's gradient to **unit norm** inside the inner loop, so the
+update is `Σ wᵢ·(∇ℓᵢ/‖∇ℓᵢ‖)` — kill the magnitude confound but keep each example's gradient
+**direction** (its real value). Needs per-example grads (`vmap(grad)`) → only fits small-k;
+`scripts/proto_gradnorm.py`, k=8, real L=128/T=16, on `mgd_diff`:
+
+| | easy | mid | hard | hard−mid | spread |
+|---|---|---|---|---|---|
+| plain (control, k=8) | −0.340 | −0.041 | +0.323 | **+0.364** | 0.663 |
+| **gradnorm (k=8)** | −0.221 | +0.076 | +0.102 | **+0.026** | 0.323 |
+
+**Gradnorm removes the hard-preference (hard−mid 0.364 → 0.026) while keeping `easy` clearly
+lowest** — the right structure (avoid easy, treat mid/hard equally), achieved by normalizing
+gradient *direction* rather than destroying loss magnitude. It also reaches a lower inner-loop
+val loss (phi 3.56 vs 3.77 — the normalized updates train better). This is the de-bias-without-
+destroying-magnitude property that clip/pow lacked, working as theorized.
+
+**Caveats (honest):** (1) k=8 is noisy and amplifies the bias (control hard−mid=0.36 vs 0.08 at
+full k=64), so magnitudes aren't directly comparable — but the *structural* flip is large and
+clear. (2) The diagnostic measures cluster means, not the *within-cluster* per-sequence signal
+that H1 needs; confirming gradnorm keeps labels **distillable** (where clipping failed, H1→0.03)
+requires a full small-k relabel + H1 (feasible on a subset: ~2500 rounds at k=8). (3) Memory:
+per-example grads cap k≈8, so production use needs k=8 + many rounds, or a microbatched/
+accumulated implementation. **Bottom line: the principled fix behaves correctly in prototype —
+the first lever to de-bias without collapsing the easy/good separation.**
+
 ## 2.12 Multi-seed significance — the negative result is REAL (2026-06-20)
 5 seeds per method on `mgd_diff` (seed varies CPT batch order); `scripts/multiseed_cpt.py`. Across-seed std is tiny (~0.02), so the §2.11 ordering is not noise:
 
