@@ -17,6 +17,9 @@ class GPT2Config:
     d: int = 768
     n_layer: int = 12
     n_head: int = 12
+    # attention backend: "xla" = explicit float32 attention (validated, default);
+    # "flashhog" = flash-hog higher-order Pallas kernel (linear memory, bf16-only).
+    attn_impl: str = "xla"
 
     @property
     def head_dim(self):
@@ -34,18 +37,38 @@ def layernorm(x, g, b, eps=1e-5):
     return (x - mu) / jnp.sqrt(var + eps) * g + b
 
 
-def _attn(x, blk, n_head):
+def _sdpa_xla(q, k, v, hd, dtype):
+    """Explicit causal scaled-dot-product attention. q,k,v: [B,nh,T,hd]. float32,
+    validated path; the -1e9 mask (not finfo.min) keeps the 2nd-order grad stable."""
+    B, nh, T, _ = q.shape
+    att = (q @ k.transpose(0, 1, 3, 2)) / jnp.sqrt(hd).astype(dtype)   # [B,nh,T,T]
+    mask = jnp.tril(jnp.ones((T, T), bool))
+    att = jnp.where(mask, att, -1e9)
+    att = jax.nn.softmax(att, axis=-1)
+    return att @ v                                                     # [B,nh,T,hd]
+
+
+def _sdpa_flashhog(q, k, v, hd, dtype):
+    """flash-hog higher-order causal attention. Linear (not quadratic) memory in T
+    and a custom bwd-of-bwd kernel — what makes long L_inner metagradients feasible.
+    The kernel runs through cuDNN fused attention, which is bf16/fp16-only, so we
+    cast in and back. API is per-sequence [T,nh,hd]; vmap over the batch dim."""
+    from flash_hog.jax.attention import dot_product_attention
+    qh, kh, vh = (t.transpose(0, 2, 1, 3).astype(jnp.bfloat16) for t in (q, k, v))  # [B,T,nh,hd]
+    fa = lambda a, b, c: dot_product_attention(a, b, c, is_causal=True)             # scale=1/sqrt(hd)
+    o = jax.vmap(fa)(qh, kh, vh)                                       # [B,T,nh,hd] bf16
+    return o.transpose(0, 2, 1, 3).astype(dtype)                      # [B,nh,T,hd]
+
+
+def _attn(x, blk, n_head, attn_impl="xla"):
     B, T, d = x.shape
     hd = d // n_head
     qkv = x @ blk["attn_c_attn_w"] + blk["attn_c_attn_b"]      # [B,T,3d]
     q, k, v = jnp.split(qkv, 3, axis=-1)
     sh = lambda t: t.reshape(B, T, n_head, hd).transpose(0, 2, 1, 3)  # [B,nh,T,hd]
     q, k, v = sh(q), sh(k), sh(v)
-    att = (q @ k.transpose(0, 1, 3, 2)) / jnp.sqrt(hd).astype(x.dtype)  # [B,nh,T,T]
-    mask = jnp.tril(jnp.ones((T, T), bool))
-    att = jnp.where(mask, att, -1e9)   # moderate (not finfo.min) for stable 2nd-order grad
-    att = jax.nn.softmax(att, axis=-1)
-    o = (att @ v).transpose(0, 2, 1, 3).reshape(B, T, d)       # [B,T,d]
+    sdpa = _sdpa_flashhog if attn_impl == "flashhog" else _sdpa_xla
+    o = sdpa(q, k, v, hd, x.dtype).transpose(0, 2, 1, 3).reshape(B, T, d)  # [B,T,d]
     return o @ blk["attn_c_proj_w"] + blk["attn_c_proj_b"]
 
 
@@ -54,8 +77,8 @@ def _mlp(x, blk):
     return h @ blk["mlp_c_proj_w"] + blk["mlp_c_proj_b"]
 
 
-def _block_fn(blk, x, n_head):
-    x = x + _attn(layernorm(x, blk["ln1_g"], blk["ln1_b"]), blk, n_head)
+def _block_fn(blk, x, n_head, attn_impl="xla"):
+    x = x + _attn(layernorm(x, blk["ln1_g"], blk["ln1_b"]), blk, n_head, attn_impl)
     x = x + _mlp(layernorm(x, blk["ln2_g"], blk["ln2_b"]), blk)
     return x
 
@@ -69,9 +92,9 @@ def forward(params, ids, cfg: GPT2Config, remat_blocks: bool = True):
     """
     B, T = ids.shape
     x = params["wte"][ids] + params["wpe"][:T]
-    blk_fn = jax.checkpoint(_block_fn, static_argnums=(2,)) if remat_blocks else _block_fn
+    blk_fn = jax.checkpoint(_block_fn, static_argnums=(2, 3)) if remat_blocks else _block_fn
     for blk in params["blocks"]:
-        x = blk_fn(blk, x, cfg.n_head)
+        x = blk_fn(blk, x, cfg.n_head, cfg.attn_impl)
     x = layernorm(x, params["lnf_g"], params["lnf_b"])
     return x @ params["wte"].T
 

@@ -5,7 +5,7 @@
 
 **Project:** Distill an expensive metagradient data-quality oracle into a cheap classifier for data selection in continued pretraining (CPT). See `design_doc.md`.
 
-**Status:** 🚧 In progress — started 2026-06-20.
+**Status:** 🚧 In progress — started 2026-06-20. Env rebuilt + **flash-hog higher-order attention integrated** (2026-06-20); Phase-1 labeling running.
 
 ---
 
@@ -14,6 +14,7 @@
 | Component | Choice |
 |---|---|
 | Metagradient engine | JAX 0.10.2 + optax (unrolled differentiable Adam, `jax.grad`, `remat`) |
+| Attention backend | `xla` float32 explicit SDPA (default, validated) **or** `flashhog` — [flash-hog](https://github.com/marcelroed/flash-hog) higher-order Pallas kernel (linear-memory, bf16) for long-context metagradients |
 | Eval / features | PyTorch 2.10 (`/root/ai-env`) |
 | Model | GPT-2 small (124M) |
 | Testbed | Continued pretraining (CPT) |
@@ -41,7 +42,13 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 
 _(populated as experiments complete; newest first within each subsection)_
 
+### 2.1 flash-hog higher-order attention (H2-enabler)
+- **flash-hog runs on this node** (2026-06-20): installed `flash-hog==0.6.0` into the cuda12 jax-env via `--no-deps` (its `pyproject` pins `jax[cuda13]`, which would *not* run on this driver-570 / CUDA-12.8 box; the Pallas kernel itself compiles fine against our existing `jax[cuda12]` 0.10.2). Verified the full higher-order path on an H100: forward → `bwd` → `bwd_fwd` → `bwd_bwd` all execute and return **finite** gradients, including a `grad(grad(...))` HVP test. vmap-batching works.
+- **Constraints found:** (1) the kernel routes through cuDNN fused attention → **bf16/fp16 only** (float32 q/k/v raises `NotImplementedError`); we cast q/k/v to bf16 inside attention and back. (2) API is per-sequence `[T, n_heads, head_dim]` (no batch dim) → we `vmap` over the batch. Integrated as an opt-in backend `GPT2Config.attn_impl="flashhog"` in `src/metagrad/model_gpt2.py`; default stays the validated float32 `xla` path.
+- **A/B vs XLA** (`scripts/bench_flashhog.py`): _pending_ — peak-memory / round-time at L_inner∈{128,256,512,1024} and Spearman ρ(s_xla, s_flashhog). Hypothesis: flash-hog's linear attention memory makes long-L_inner metagradients feasible where the float32 XLA path OOMs (XLA OOMs at L_inner=256 today).
+
 ### 2.0 Sanity checks
+- **Fresh-env rebuild verified** (2026-06-20): both venvs rebuilt from scratch on a clean container per `ENV.md` (jax-env: jax 0.10.2 + 8 GPUs; ai-env: torch 2.10.0+cu128, CUDA on 8 devices). Corpus regenerated identically (M=50000, V=2000, 12.8M tokens). Metagrad unit test re-PASSED in the rebuilt env (good +0.93 > corrupt −0.92).
 - **GPT-2 JAX forward validated** (2026-06-20): on held-out data, val(pubmed) ppl=32.2, good(pubmed)=31.2, offdomain(c4)=37.4, corrupt(shuffled)=4137. Correct ordering → the testbed has a clean ground truth (target=pubmed ⇒ good < offdomain ≪ corrupt in loss).
 - **Metagradient unit test PASS** (2026-06-20): tiny 2-layer model, T=4. `tau = ∂Φ/∂w` finite & non-zero; sign sanity holds — val-matching "good" seqs score +0.92 vs random "corrupt" −0.91 (good > corrupt). Fixes that mattered: eps *inside* Adam's `sqrt(v+eps)` (else 0·∞=NaN for zero-grad params), moderate attention mask value −1e9 (not `finfo.min`) for stable 2nd-order grad.
 
@@ -51,4 +58,5 @@ _(populated as experiments complete; newest first within each subsection)_
 - 2026-06-20: Project kickoff. Metagradients in JAX (per requirement); direct unrolled Adam since `T` is small (REPLAY reserved for scaling).
 - 2026-06-20: **Feasibility measured before running** (`FEASIBILITY.md`). One metagrad round (GPT-2 small, no block-remat): k=64, L_inner=128, T=16 → 52 GB peak (75 GB live under the platform allocator while streaming rounds), 3.24 s/round. Memory is dominated by the unrolled-trajectory carries (∝T), nearly flat in k; L_inner=256 and k≥96 OOM. Per-block remat fixed memory but made 2nd-order compile ~10 min → rejected; chosen lever is more (cheap) rounds at moderate k.
 - 2026-06-20: Chosen knobs — M=50k, T_seq=256, L_inner=128, k=64, T=16, coverage C=4, budget n=top-10% tokens (ablate 1/5/10/25%).
-- 2026-06-20: **Phase-1 labeling running** on all 8×H100 (3200 rounds total, ~22 min, wandb group `labeling-main`).
+- 2026-06-20: **Phase-1 labeling running** on all 8×H100 (3200 rounds total, ~22 min, k=64/T=16/L_inner=128).
+- 2026-06-20: **Infra rebuilt on fresh container + flash-hog integrated.** Two venvs rebuilt from scratch (jax-env, ai-env). flash-hog higher-order attention kernel installed and verified on driver-570/CUDA-12.8 (had to bypass its `jax[cuda13]` pin via `--no-deps`; leaf deps added: chex/jaxtyping/toolz/einops/wadler_lindig). Wired as opt-in `attn_impl="flashhog"` backend; bf16-only + per-sequence `[T,nh,hd]` API handled in `_sdpa_flashhog`. Rationale: at the current L_inner=128 attention isn't the memory bottleneck (logits `[k,L,vocab]` + trajectory carries dominate), but flash-hog's linear attention memory is what unlocks the long-L_inner / longer-T_seq ablations the XLA path OOMs on — strengthening **H2**.
