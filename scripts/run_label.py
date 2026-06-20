@@ -14,7 +14,7 @@ def main():
     ap.add_argument("--total_rounds", type=int, required=True)
     ap.add_argument("--k", type=int, default=256)
     ap.add_argument("--T", type=int, default=16)
-    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--L_inner", type=int, default=128)
     ap.add_argument("--val_bs", type=int, default=128)
     ap.add_argument("--data_dir", default="artifacts/data/mgd_v1")

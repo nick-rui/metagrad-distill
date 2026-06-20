@@ -42,6 +42,20 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 
 _(populated as experiments complete; newest first within each subsection)_
 
+### 2.2 Inner-loop lr is decisive — metagradient only ranks data in the *stable* regime (2026-06-20)
+The first full labeling run (lr=1e-3, the original default) produced **near-noise labels**: cluster means good −0.002 / offdomain −0.002 / corrupt +0.008, i.e. corrupt (token-shuffled PubMed) scored *highest* and was 2× over-represented in the top-10% (Cohen's d good−corrupt = −0.02). Root cause: at lr=1e-3 the inner Adam loop **destroys the model in 16 steps** — val loss `phi` runs to 6.6–6.7 (ppl ~750) vs base GPT-2 PubMed loss 3.45 (ppl 31). The metagradient through a diverging trajectory measures catastrophic-forgetting dynamics dominated by the high-gradient corrupt sequences, not genuine data value.
+
+An lr sweep (`scripts/diag_lr.py`, 30 rounds each, k=64/T=16) shows a sharp transition:
+
+| inner lr | phi (val loss, base=3.45) | Cohen's d (good−corrupt) | cluster means good / off / corrupt |
+|---|---|---|---|
+| **3e-5** | **3.63 (stable)** | **+1.75** ✓ | **+0.73 / −0.34 / −0.80** |
+| 1e-4 | 4.00 | −4.35 | −0.78 / −0.03 / +1.62 |
+| 3e-4 | 5.38 | −1.69 | −0.53 / −0.01 / +1.08 |
+| 1e-3 (orig) | 6.70 (diverged) | −0.005 | +0.05 / −0.07 / +0.06 |
+
+**Takeaway:** only when the inner loop stays near the base model (lr≈3e-5, phi≈base) does the metagradient recover the ground-truth ordering **good > offdomain > corrupt** — and there it does so cleanly (d=+1.75). This is the metagradient analogue of the DPG paper's "short proxy runs are enough" caveat: the proxy must be *stable*, not just short. **Fix applied:** default inner lr → 3e-5 in `label.py`/`run_label.py`; full labeling re-run at lr=3e-5.
+
 ### 2.1 flash-hog higher-order attention (H2-enabler)
 - **flash-hog runs on this node** (2026-06-20): installed `flash-hog==0.6.0` into the cuda12 jax-env via `--no-deps` (its `pyproject` pins `jax[cuda13]`, which would *not* run on this driver-570 / CUDA-12.8 box; the Pallas kernel itself compiles fine against our existing `jax[cuda12]` 0.10.2). Verified the full higher-order path on an H100: forward → `bwd` → `bwd_fwd` → `bwd_bwd` all execute and return **finite** gradients, including a `grad(grad(...))` HVP test. vmap-batching works.
 - **Constraints found:** (1) the kernel routes through cuDNN fused attention → **bf16/fp16 only** (float32 q/k/v raises `NotImplementedError`); we cast q/k/v to bf16 inside attention and back. (2) API is per-sequence `[T, n_heads, head_dim]` (no batch dim) → we `vmap` over the batch. Integrated as an opt-in backend `GPT2Config.attn_impl="flashhog"` in `src/metagrad/model_gpt2.py`; default stays the validated float32 `xla` path.
