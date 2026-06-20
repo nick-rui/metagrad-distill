@@ -1,0 +1,86 @@
+{
+  "cohort00_g0.00": {
+    "good_frac": 0.0,
+    "n": 2000,
+    "mean_pred": -0.5395894646644592,
+    "frac_highpred": 0.167
+  },
+  "cohort01_g0.08": {
+    "good_frac": 0.07692307692307693,
+    "n": 2000,
+    "mean_pred": -0.45109906792640686,
+    "frac_highpred": 0.234
+  },
+  "cohort02_g0.15": {
+    "good_frac": 0.15384615384615385,
+    "n": 2000,
+    "mean_pred": -0.35178929567337036,
+    "frac_highpred": 0.2865
+  },
+  "cohort03_g0.23": {
+    "good_frac": 0.23076923076923078,
+    "n": 2000,
+    "mean_pred": -0.25214454531669617,
+    "frac_highpred": 0.36
+  },
+  "cohort04_g0.31": {
+    "good_frac": 0.3076923076923077,
+    "n": 2000,
+    "mean_pred": -0.16678036749362946,
+    "frac_highpred": 0.401
+  },
+  "cohort05_g0.38": {
+    "good_frac": 0.38461538461538464,
+    "n": 2000,
+    "mean_pred": -0.05442681908607483,
+    "frac_highpred": 0.4645
+  },
+  "cohort06_g0.46": {
+    "good_frac": 0.46153846153846156,
+    "n": 2000,
+    "mean_pred": 0.015908081084489822,
+    "frac_highpred": 0.513
+  },
+  "cohort07_g0.54": {
+    "good_frac": 0.5384615384615385,
+    "n": 2000,
+    "mean_pred": 0.13280890882015228,
+    "frac_highpred": 0.582
+  },
+  "cohort08_g0.62": {
+    "good_frac": 0.6153846153846154,
+    "n": 2000,
+    "mean_pred": 0.22327817976474762,
+    "frac_highpred": 0.639
+  },
+  "cohort09_g0.69": {
+    "good_frac": 0.6923076923076923,
+    "n": 2000,
+    "mean_pred": 0.33089929819107056,
+    "frac_highpred": 0.709
+  },
+  "cohort10_g0.77": {
+    "good_frac": 0.7692307692307693,
+    "n": 2000,
+    "mean_pred": 0.41193100810050964,
+    "frac_highpred": 0.7575
+  },
+  "cohort11_g0.85": {
+    "good_frac": 0.8461538461538463,
+    "n": 2000,
+    "mean_pred": 0.48267263174057007,
+    "frac_highpred": 0.807
+  },
+  "cohort12_g0.92": {
+    "good_frac": 0.9230769230769231,
+    "n": 2000,
+    "mean_pred": 0.598710298538208,
+    "frac_highpred": 0.8715
+  },
+  "cohort13_g1.00": {
+    "good_frac": 1.0,
+    "n": 2000,
+    "mean_pred": 0.691633403301239,
+    "frac_highpred": 0.9385
+  }
+}

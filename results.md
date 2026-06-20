@@ -5,7 +5,16 @@
 
 **Project:** Distill an expensive metagradient data-quality oracle into a cheap classifier for data selection in continued pretraining (CPT). See `design_doc.md`.
 
-**Status:** 🚧 In progress — started 2026-06-20. Env rebuilt + **flash-hog higher-order attention integrated** (2026-06-20); Phase-1 labeling running.
+**Status:** ✅ Full pipeline run end-to-end (2026-06-20). H1/H3/H4/H5 supported; H2 honest-negative; flash-hog integrated + benchmarked.
+
+### Executive summary (2026-06-20)
+The core MGD claim **holds**: the expensive metagradient oracle (top-10% by oracle = 99.5% on-target, Cohen's d=+1.94) distills into a cheap forward-only classifier that reproduces it (**H1 ρ=0.72**), and selecting the classifier's top-10% gives a downstream CPT win (**H3: +8.02 ppl, 99% of the oracle's +8.09**), far above generic baselines (random +6.39, ppl-top +6.76). Aggregate ŝ also rank-predicts cohort lift perfectly (**H5 ρ=1.0**).
+
+**Two honest caveats, both pointing to the same next experiment.** (1) On this *easy* good/bad-cluster corpus, a cheap `domain_match`/`base-ppl` baseline ties MGD (H3 and H5) — because "pick the on-domain text" captures nearly all available lift, and the metagradient oracle's own margin over domain matching is tiny here. (2) H2: at the *stable* inner-lr (3e-5), short proxy runs do **not** preserve per-batch ranking (ρ(T≤8,T16)≤0.21) — MGD's signal is averaging-driven, not single-short-run. The decisive follow-up is a **harder corpus** (all in-domain, varying quality/subtopic) where domain purity is not the answer, to isolate the metagradient's value-add.
+
+**Biggest bug caught & fixed:** the original inner-lr=1e-3 destroyed the model in 16 steps and produced *noise* labels (corrupt scored highest); lr=3e-5 recovered clean ground-truth separation (§2.2).
+
+**flash-hog:** installs & runs on this CUDA-12.8 node, numerically faithful (ρ=0.9999 vs XLA) and ~11% faster, but doesn't lower the L_inner ceiling — the bottleneck is LM-head logits, not attention (§2.1).
 
 ---
 
@@ -34,7 +43,7 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 | H2 | Short inner loops preserve ranking | ρ(trunc-T, full-T) | ⚠️ **not supported per-batch** at stable lr (ρ(T≤8,T16)≤0.21); signal is averaging-driven, not per-round |
 | H3 | Top-n selection beats baselines, approaches oracle | held-out PubMed ppl | **✓ classifier +8.02 ≈ oracle +8.09; > all cheap baselines** |
 | H4 | Classifier is cheap + predictive (Pareto) | power vs cost | **✓ plot: `artifacts/report/b10/pareto.png`** (classifier ≈ oracle lift; per-eval cost = forward passes, oracle cost amortized one-time) |
-| H5 | Aggregate ŝ predicts cohort lift | held-out R²/ρ | _pending_ |
+| H5 | Aggregate ŝ predicts cohort lift | held-out R²/ρ | **✓ ρ=1.0, R²=0.51** (base-ppl baseline also ρ=−1.0, R²=0.72) |
 
 ---
 
@@ -59,6 +68,14 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 **Headline:** the cheap classifier captures **99.1% of the oracle's lift** (+8.02 vs +8.09) and beats every cheap baseline that isn't explicit domain matching (random +6.39 → classifier +8.02 = **+1.6 ppl** over random). The method does what MGD claims: distill the metagradient oracle into a forward-only scorer that selects nearly as well as the oracle itself.
 
 **Honest caveat:** on this corpus the oracle's own margin over the cheap `domain_match` baseline is tiny (+8.09 vs +8.04), because the corpus is an *easy* good/bad-cluster mixture where "pick PubMed, drop C4/shuffled" captures almost all the available lift — and both the oracle and a cheap domain matcher already do that. So MGD **matches** domain_match here rather than beating it. Demonstrating metagradient value-add *over* domain matching needs a harder corpus (e.g. all-in-domain with quality/subtopic variation, where domain purity is not the answer) — flagged as the key next experiment. What this run *does* establish: H1 (distillation) and H3 (classifier ≈ oracle, ≫ generic baselines) both hold.
+
+### 2.6 H5 — aggregate ŝ predicts held-out cohort lift ✓ (2026-06-20)
+14 cohorts of 2000 seqs, good_frac swept 0.0→1.0; CPT each (2 epochs), lift = base PubMed ppl − post-CPT ppl. Predictor = mean classifier score `ŝ` over the cohort; tested against held-out lift.
+
+- **Our aggregate ŝ: Spearman ρ = 1.0**, R² = 0.51 — mean ŝ rises monotonically with cohort lift (−0.54 @ good_frac 0 → +0.69 @ good_frac 1; lift −7.2 → +6.2). It even flags the all-junk cohort (good_frac 0) where CPT *hurts* (lift −7.2) with the lowest score.
+- **Cheap base-ppl baseline:** ρ = −1.0, R² = 0.72 (lower mean base ppl → higher lift).
+
+**Honest read (same as H3):** ŝ predicts cohort lift perfectly by rank, but because these cohorts are built by monotonically varying domain purity, the cheap base-ppl baseline tracks lift just as well (better linear R²). H5 holds; it doesn't *beat* the cheap baseline on this construction. A cohort design that decorrelates "lift" from "base perplexity / domain purity" is what would isolate the metagradient's added value.
 
 ### 2.45 H2 — truncation does NOT transfer per-batch at the stable lr ⚠️ (2026-06-20)
 Per-batch Spearman ρ between truncated-T and the T=16 reference (k=32, 12 batches, lr=3e-5, each T scored in its own process — `scripts/h2_truncation.py`, since one process OOMs accumulating compiles across T):
