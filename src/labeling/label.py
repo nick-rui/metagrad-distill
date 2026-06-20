@@ -15,8 +15,13 @@ from collections import defaultdict
 import numpy as np
 
 
+def _save(out_path, sum_s, cnt, phis, meta, done_rounds):
+    np.savez(out_path, sum_s=sum_s, cnt=cnt, phis=np.asarray(phis),
+             done_rounds=done_rounds, meta=json.dumps(meta))
+
+
 def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
-              base="gpt2", wandb_run=None, log_every=10):
+              base="gpt2", wandb_run=None, log_every=10, ckpt_every=25):
     import jax
     from src.metagrad import model_gpt2 as M
     from src.metagrad.metagrad import metagrad_scores
@@ -26,13 +31,28 @@ def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
     val = np.load(os.path.join(data_dir, "val.npy")).astype(np.int32)
     M_total = tok.shape[0]
     params0, cfg = M.load_pretrained(base)
+    meta = dict(n_rounds=n_rounds, k=k, T=T, lr=lr, L_inner=L_inner,
+                val_bs=val_bs, seed=seed, base=base)
 
     rng = np.random.default_rng(seed)
     sum_s = np.zeros(M_total, np.float64)
     cnt = np.zeros(M_total, np.int32)
     phis = []
+    # resume from checkpoint if present
+    start = 0
+    if os.path.exists(out_path):
+        try:
+            d = np.load(out_path, allow_pickle=True)
+            sum_s, cnt = d["sum_s"], d["cnt"]
+            phis = list(d["phis"]); start = int(d["done_rounds"])
+            # advance rng to keep sampling stream consistent
+            for _ in range(start):
+                rng.choice(M_total, size=k, replace=False)
+            print(f"[shard {seed}] resuming from round {start}", flush=True)
+        except Exception as e:
+            print(f"[shard {seed}] ckpt load failed ({e}); fresh start", flush=True)
     t_start = time.time()
-    for r in range(n_rounds):
+    for r in range(start, n_rounds):
         idx = rng.choice(M_total, size=k, replace=False)
         seqs = tok[idx].astype(np.int32)
         s, phi = metagrad_scores(params0, seqs, val, cfg, T=T, lr=lr,
@@ -48,10 +68,10 @@ def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
         if r % 25 == 0:
             print(f"[shard {seed}] round {r}/{n_rounds} phi={phi:.4f} "
                   f"covered={int((cnt>0).sum())} "
-                  f"{(r+1)/(time.time()-t_start):.2f} rounds/s", flush=True)
-    np.savez(out_path, sum_s=sum_s, cnt=cnt, phis=np.asarray(phis),
-             meta=json.dumps(dict(n_rounds=n_rounds, k=k, T=T, lr=lr,
-                                  L_inner=L_inner, val_bs=val_bs, seed=seed, base=base)))
+                  f"{(r+1-start)/(time.time()-t_start):.2f} rounds/s", flush=True)
+        if (r + 1) % ckpt_every == 0:
+            _save(out_path, sum_s, cnt, phis, meta, r + 1)   # periodic durable checkpoint
+    _save(out_path, sum_s, cnt, phis, meta, n_rounds)
     print(f"[shard {seed}] done -> {out_path} ({time.time()-t_start:.0f}s)", flush=True)
 
 
