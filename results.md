@@ -20,7 +20,11 @@ The core MGD claim **holds**: the expensive metagradient oracle (top-10% by orac
 Built an **all-in-domain** corpus (`mgd_hard`: all PubMed; clusters `clean` / `repetitive` [lowest ppl, low value] / `noised` [clean-like features, low value]) to break the cheap baselines, plus two methodology probes. Verdict:
 
 1. **Distillation is robust even when surface cues mislead (✓ strong).** On `mgd_hard`, H1 ρ=**0.76**; the features-only classifier reproduces the oracle including assigning `noised` the lowest score (−0.95) *despite its 0.995 feature-cosine to target*. Downstream, classifier **+7.65 ≈ oracle +7.68** (99.6%).
-2. **Beats perplexity selection decisively; ties feature-similarity (honest).** `ppl_top` is *catastrophically* fooled — picks 100% `repetitive` and CPT **−53.9** (training on lowest-ppl data destroys the model), while MGD is robust. But `domain_match`/`ppl_corr` still **tie** MGD (~+7.7): whenever valuable data forms a *feature-identifiable* cluster, cheap feature matching finds it too. **MGD's value-add over feature-matching remains unproven** — it needs a corpus where value is *not* feature-aligned (redundancy / marginal-value structure).
+2. **Beats perplexity selection decisively; ties feature-similarity (honest).** `ppl_top` is *catastrophically* fooled — picks 100% `repetitive` and CPT **−53.9** (training on lowest-ppl data destroys the model), while MGD is robust. But `domain_match`/`ppl_corr` still **tie** MGD (~+7.7): whenever valuable data forms a *feature-identifiable* cluster, cheap feature matching finds it too.
+
+**1b. The oracle is real (✓✓ foundational, §2.10).** Finite-difference check: Spearman(autodiff τ, black-box re-run τ) = **0.982**, sign-agreement 94%. The metagradient genuinely measures `∂Φ/∂wᵢ` — first ground-truth validation.
+
+**2b. Value-add over feature-matching: DISPROVEN on the corpus built to show it (⚠️ §2.11).** All-clean-PubMed stratified by difficulty (domain_match blind, ppl_top picks easy). The metagradient prefers `hard` data — but hard does *not* train better: **random/mid wins (+7.76)**, the oracle's hard-pick gets +7.73, and the classifier **underperforms random (+7.39)**. So the metagradient's one theoretical edge (marginal value) doesn't convert to a downstream win — it over-values high-gradient hard examples (echoing the lr pathology). **Honest conclusion: MGD matches cheap baselines when value is feature-aligned and *loses* to random when it isn't. The "breaks the Pareto frontier" claim is not supported.**
 3. **Amortization works (✓).** A classifier trained on the *easy* corpus, applied to the *hard* corpus, selects 96.8% clean and gets **+7.58** (≈ native +7.65, oracle +7.68). The learned value-function transfers across corpora — "pay the oracle once, score elsewhere."
 4. **Weighting CAN match/beat the hard cut — if done right (✓, corrected).** Using ŝ for **relu-gated importance sampling** (zero below median, graded above) gives **+7.73**, edging the hard top-n cut (+7.65). But the form matters: *loss-weighting* uniform-sampled batches wastes compute on junk (+6.6), softmax-sampling overfits (−88.8 at low temp), and uniform full-corpus training (+6.84 ≈ random) shows you must concentrate. So "let the classifier weight each sample" works as **importance sampling**, not as naive per-sample loss weights (§2.9).
 
@@ -86,6 +90,30 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 **Honest read (same as H3):** ŝ predicts cohort lift perfectly by rank, but because these cohorts are built by monotonically varying domain purity, the cheap base-ppl baseline tracks lift just as well (better linear R²). H5 holds; it doesn't *beat* the cheap baseline on this construction. A cohort design that decorrelates "lift" from "base perplexity / domain purity" is what would isolate the metagradient's added value.
 
 ---
+
+## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
+Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
+
+- **Spearman(τ_autodiff, τ_finite-diff) = 0.982**, Pearson 0.962, **sign-agreement 94%** (k=24, T=16, lr=3e-5, ε=0.05). Magnitudes differ ~22% (rel-L2, expected from ε and curvature) but the *ranking and sign* — all the method uses — are validated.
+
+So the autodiff metagradient genuinely is `∂Φ/∂wᵢ`, the real sensitivity of the target to each sequence's training weight. **The oracle measures real training value** — the assumption under every downstream result now has direct evidence.
+
+## 2.11 Difficulty corpus — value-add DISPROVEN, honestly (`mgd_diff`, 2026-06-20) ⚠️
+The corpus built to give the metagradient its best shot at beating feature-matching: **all clean PubMed**, stratified by base-model loss into `easy` (ppl 20, already-known), `mid` (30), `hard` (44, informative). domain_match is blind (all clean → same features); ppl_top picks easy. The metagradient's one theoretical edge is *marginal value given what the model already knows*.
+
+**Oracle prefers hard** (label hard +0.19 > mid 0.00 > easy −0.19; top-10% = 49% hard, 20% easy). **But hard is not actually the best training data:**
+
+| method | improvement | selects |
+|---|---|---|
+| random | **+7.76** | even |
+| ppl_corr | +7.76 | 100% mid |
+| oracle | +7.73 | 49% hard |
+| domain_match | +7.61 | spread |
+| **classifier (ours)** | **+7.39** | 56% hard |
+| ppl_top | +6.47 | 100% easy |
+| length | +5.15 | 56% easy |
+
+**Verdict (honest):** selecting *easy* is clearly bad (ppl_top +6.47), so difficulty matters — but the metagradient over-corrects to *hard*, which does **not** beat plain **random/mid** selection (+7.76). The cheap classifier (H1 only ρ=0.37 here — difficulty is barely readable from features) over-selects hard and **underperforms random** (+7.39 vs +7.76). So on the corpus designed to expose the metagradient's unique value, **it adds no value and slightly hurts.** This mirrors the lr pathology: a short-horizon metagradient over-values high-gradient (hard/corrupt) examples whose downstream benefit doesn't materialize. *(Significance of the classifier<random gap: see §2.12 multi-seed.)*
 
 ## 2.7 Decisive test — hard all-in-domain corpus (`mgd_hard`, 2026-06-20)
 Built to break the cheap baselines: **everything is PubMed**, so domain purity is useless, and value is decorrelated from the two cheap cues. Clusters (verified): `clean` (ppl 30.9, value), `repetitive` (a 16-tok window tiled → **ppl 1.6**, lowest, fools `ppl_top`), `noised` (20% tokens randomised → **feat-cos 0.995 to target**, fools `domain_match`). Target Φ = held-out clean PubMed. Relabeled at lr=3e-5.
