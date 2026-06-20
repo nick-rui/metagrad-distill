@@ -28,14 +28,14 @@ def peak_gb():
     return s.get("peak_bytes_in_use", 0) / 1e9
 
 
-def run_one(params, cfg, seqs, val, T, L, val_bs):
+def run_one(params, cfg, seqs, val, T, L, val_bs, lr=3e-5):
     """compile + timed round; returns (row, s) or (row, None) on failure."""
     try:
         t0 = time.time()
-        s, phi = metagrad_scores(params, seqs, val, cfg, T=T, lr=1e-3, val_bs=val_bs, L_inner=L)
+        s, phi = metagrad_scores(params, seqs, val, cfg, T=T, lr=lr, val_bs=val_bs, L_inner=L)
         jax.block_until_ready(s); compile_t = time.time() - t0
         t0 = time.time()
-        s, phi = metagrad_scores(params, seqs, val, cfg, T=T, lr=1e-3, val_bs=val_bs, L_inner=L)
+        s, phi = metagrad_scores(params, seqs, val, cfg, T=T, lr=lr, val_bs=val_bs, L_inner=L)
         jax.block_until_ready(s); run_t = time.time() - t0
         row = dict(attn=cfg.attn_impl, L_inner=L, peak_gb=round(peak_gb(), 2),
                    compile_s=round(compile_t, 1), round_s=round(run_t, 2),

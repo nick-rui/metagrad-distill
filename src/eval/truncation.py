@@ -8,7 +8,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 
-def run(data_dir, out_path, Ts=(1, 2, 4, 8, 16), k=32, n_batches=12, lr=1e-3,
+def run(data_dir, out_path, Ts=(1, 2, 4, 8, 16), k=32, n_batches=12, lr=3e-5,
         L_inner=128, val_bs=128, optimizer="adam", seed=0, wandb_run=None):
     from src.metagrad import model_gpt2 as M
     from src.metagrad.metagrad import metagrad_scores
@@ -57,6 +57,7 @@ if __name__ == "__main__":
     ap.add_argument("--Ts", type=int, nargs="+", default=[1, 2, 4, 8, 16])
     ap.add_argument("--k", type=int, default=32)
     ap.add_argument("--n_batches", type=int, default=12)
+    ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--optimizer", default="adam")
     ap.add_argument("--wandb", action="store_true")
     args = ap.parse_args()
@@ -66,5 +67,5 @@ if __name__ == "__main__":
         run_ = wandb.init(project="metagrad-distill", group="ablation-truncation",
                           name=f"trunc-{args.optimizer}", config=vars(args))
     run(args.data_dir, args.out_path, tuple(args.Ts), args.k, args.n_batches,
-        optimizer=args.optimizer, wandb_run=run_)
+        lr=args.lr, optimizer=args.optimizer, wandb_run=run_)
     if run_: run_.finish()
