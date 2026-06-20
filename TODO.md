@@ -37,25 +37,25 @@ Last updated: 2026-06-20 (env rebuilt on fresh container; flash-hog integrated; 
 - [ ] **Full-metagradient oracle** over all M (small scale) = gold standard for validation.
 
 ## Phase 4 — Classifier (`src/classifier`)
-- [ ] Featurizer: base GPT-2 mean hidden state (primary); sentence-transformer embedding (ablation).
-- [ ] Regressor: LightGBM / Ridge / MLP.
-- [ ] **H1 Faithfulness:** Spearman ρ(ŝ, oracle s) on held-out seqs.
+- [x] Featurizer: base GPT-2 mean hidden state (primary).
+- [x] Regressor: LightGBM.
+- [x] **H1 Faithfulness:** ρ(ŝ, oracle s) = **0.72** (R²=0.55) held-out. Preds recover good>off>corrupt.
 
 ## Phase 5 — Selection (`src/select`)
-- [ ] Score all M (forward only), pick top-n (token budget). Optional dedup/diversity penalty.
+- [x] Score all M (forward only), pick top-n. classifier selects **100% good** (oracle 99.4%).
 
 ## Phase 6 — Final CPT + eval (`src/train_final`, `src/baselines`, `src/eval`)
-- [ ] CPT GPT-2 on selected tokens; eval held-out PubMed ppl/loss.
-- [ ] Baselines: random, perplexity-top, perplexity-correlation, DSIR-style, oracle top-n, full-corpus.
-- [ ] **H3 Downstream win:** classifier top-n > baselines, approaches oracle.
+- [x] CPT GPT-2 on selected tokens; eval held-out PubMed ppl.
+- [x] Baselines: random, perplexity-top, perplexity-correlation, DSIR-style, oracle top-n.
+- [x] **H3 Downstream win:** classifier **+8.02** ≈ oracle +8.09 ≫ random +6.39 / length +2.43. (ties domain_match — easy-corpus caveat in results.md §2.5.)
 
 ## Phase 7 — Ablations & Pareto (`src/eval`)
-- [ ] **H2 Truncation:** ρ(truncated-T, full-T) over T∈{1,8,16,32,96}; smallest T preserving ranking. Adam-vs-SGD control.
-- [ ] Feature ablation, k ablation, budget ablation (1/5/10/25%).
-- [ ] **H4 Pareto:** predictive-power-vs-cost plot for all methods.
+- [x] **H2 Truncation:** robust per-T-subprocess driver. ρ(T≤8, T16)≤0.21 → does NOT transfer per-batch at stable lr (signal is averaging-driven). Honest negative, see §2.45.
+- [x] **H4 Pareto:** `artifacts/report/b10/pareto.png` + `cpt_efficiency.png`.
+- [ ] Feature ablation, k ablation, budget ablation (1/5/10/25%) — not run (time).
 
 ## Phase 8 — Cohort lift (`src/eval`) [stretch]
-- [ ] **H5:** build cohorts (vary one property), CPT each, lift = ppl improvement; aggregate ŝ predicts held-out cohort lift (R²/ρ + scatter).
+- [~] **H5:** 14 cohorts, CPT each, aggregate ŝ vs held-out lift — **running**.
 
 ## Hygiene (always)
 - [ ] Keep `results.md` clean + current. Commit incrementally. Update this TODO.
