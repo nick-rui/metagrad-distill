@@ -140,9 +140,24 @@ loss before the weighted sum, sweep on mgd_diff:
 At an aggressive cap (2.6, below all clusters' natural loss ~3.0-3.8) the oracle flips
 hard->mid -- so the bias really *is* gradient magnitude (clipping it works where WD
 didn't). But it's fragile: moderate clips (2.9-3.5) *increase* the hard-bias, and 2.6
-caps below all real losses. Full relabel of mgd_diff at clip=2.6 + multi-seed pending:
-the *ceiling* here is matching random (no selection beats random on a homogeneous-value
-corpus), so the test is "does the fix recover MGD from significantly-worse-than-random?"
+caps below all real losses. **Full relabel at clip=2.6 — the fix recovers the oracle (2026-06-20).** Relabeled
+mgd_diff at clip=2.6 (3200 rounds); oracle labels now hard +0.082 ≈ mid +0.080 (was
+hard +0.129 ≫ mid +0.045 — the hard-bias is gone), selection near-uniform
+(0.32/0.34/0.34 vs 0.20/0.31/0.49). Downstream H3 (single seed; multi-seed pending):
+
+| method | clip=2.6 | clip=0 | Δ |
+|---|---|---|---|
+| **oracle** | **+7.763** | +7.728 | +0.035 → **ties random (+7.762)** ✓ |
+| classifier | +7.616 | +7.390 | **+0.226** (recovers most of the gap) |
+| random | +7.762 | +7.762 | — |
+
+**The de-biasing works:** the oracle recovers from below-random to *matching* random —
+so the §2.11-2.12 failure was a **fixable gradient-magnitude miscalibration**, not a
+dead end. Caveat / new tradeoff: aggressively flattening the labels to de-bias them
+**collapses H1 to ρ=0.03** (was 0.37) — the signal becomes too flat to distill, so the
+classifier (+7.616) recovers less than the oracle and still trails random. Net: clipping
+fixes the *oracle's* bias but starves the *classifier*; a softer de-biaser (per-example
+grad-norm) that removes the magnitude bias without flattening the signal is the next step.
 
 ## 2.10 FOUNDATIONAL — the oracle is real (finite-difference check, 2026-06-20) ✓✓
 Until now the metagradient oracle was only ever validated *against itself* (cluster orderings, H1). `scripts/validate_oracle_fd.py` checks it against **ground truth**: re-run the SAME inner loop at `w = 1 ± ε·eᵢ` and central-difference Φ (a black-box that assumes nothing about autodiff), then compare to the autodiff τ.
