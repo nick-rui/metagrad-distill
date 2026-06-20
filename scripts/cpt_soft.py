@@ -24,6 +24,20 @@ def softmax(x, temp):
     e = np.exp(z); return e / e.sum()
 
 
+def weight_dist(shat, scheme, temp):
+    """Per-sample weight over the corpus (sums to 1). softmax: graded by score;
+    relu: zero out below-median (soft selection of positives, graded above);
+    uniform: equal weight (the 'no weighting' baseline)."""
+    if scheme == "uniform":
+        w = np.ones_like(shat)
+    elif scheme == "relu":
+        w = np.clip(shat - np.median(shat), 0, None)   # keep top ~half, graded
+        if w.sum() == 0: w = np.ones_like(shat)
+    else:  # softmax
+        return softmax(shat, temp)
+    return w / w.sum()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", required=True)
@@ -33,6 +47,7 @@ def main():
     ap.add_argument("--steps", type=int, required=True)   # match hard run's optimizer steps
     ap.add_argument("--temp", type=float, default=0.3)
     ap.add_argument("--mode", choices=["sample", "lossweight"], default="sample")
+    ap.add_argument("--weight", choices=["softmax", "relu", "uniform"], default="softmax")
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--bs", type=int, default=32)
     ap.add_argument("--eval_every", type=int, default=120)
@@ -45,7 +60,7 @@ def main():
     tok = np.load(os.path.join(a.data_dir, "tokens.npy")).astype(np.int64)
     val = np.load(os.path.join(a.data_dir, "val.npy")).astype(np.int64)
     shat = np.load(a.pred)["pred"].astype(np.float64)
-    p = softmax(shat, a.temp)                          # corpus-level sampling/weight dist
+    p = weight_dist(shat, a.weight, a.temp)            # corpus-level sampling/weight dist
     w_full = (p * len(p))                              # mean-1 weights for lossweight mode
 
     model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
