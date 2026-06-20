@@ -37,8 +37,8 @@ def _phi_and_metagrad(params0, seqs, val, cfg, T, lr=1e-3, b1=0.9, b2=0.999,
     def phi_of_w(w):
         def wloss(p):
             pe = M.loss_per_example(p, seqs, cfg, remat_blocks)          # [k]
-            if loss_clip > 0:
-                pe = jnp.minimum(pe, loss_clip)                          # cap magnitude
+            cap = jnp.where(loss_clip > 0, loss_clip, jnp.inf)           # traced-safe
+            pe = jnp.minimum(pe, cap)                                    # cap magnitude (no-op if clip<=0)
             return jnp.sum(w * pe) / k
 
         def step(carry, t):
