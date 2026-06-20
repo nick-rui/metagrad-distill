@@ -31,7 +31,7 @@ Method recap: metagradient `τ_i = ∂Φ/∂w_i` at `w=1` via backprop through a
 | ID | Hypothesis | Metric | Result |
 |---|---|---|---|
 | H1 | Cheap classifier predicts oracle metagradient scores | Spearman ρ(ŝ, s) | **✓ ρ=0.72, R²=0.55** (held-out) |
-| H2 | Short inner loops preserve ranking | ρ(trunc-T, full-T) | _pending_ |
+| H2 | Short inner loops preserve ranking | ρ(trunc-T, full-T) | ⚠️ **not supported per-batch** at stable lr (ρ(T≤8,T16)≤0.21); signal is averaging-driven, not per-round |
 | H3 | Top-n selection beats baselines, approaches oracle | held-out PubMed ppl | **✓ classifier +8.02 ≈ oracle +8.09; > all cheap baselines** |
 | H4 | Classifier is cheap + predictive (Pareto) | power vs cost | **✓ plot: `artifacts/report/b10/pareto.png`** (classifier ≈ oracle lift; per-eval cost = forward passes, oracle cost amortized one-time) |
 | H5 | Aggregate ŝ predicts cohort lift | held-out R²/ρ | _pending_ |
@@ -59,6 +59,15 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 **Headline:** the cheap classifier captures **99.1% of the oracle's lift** (+8.02 vs +8.09) and beats every cheap baseline that isn't explicit domain matching (random +6.39 → classifier +8.02 = **+1.6 ppl** over random). The method does what MGD claims: distill the metagradient oracle into a forward-only scorer that selects nearly as well as the oracle itself.
 
 **Honest caveat:** on this corpus the oracle's own margin over the cheap `domain_match` baseline is tiny (+8.09 vs +8.04), because the corpus is an *easy* good/bad-cluster mixture where "pick PubMed, drop C4/shuffled" captures almost all the available lift — and both the oracle and a cheap domain matcher already do that. So MGD **matches** domain_match here rather than beating it. Demonstrating metagradient value-add *over* domain matching needs a harder corpus (e.g. all-in-domain with quality/subtopic variation, where domain purity is not the answer) — flagged as the key next experiment. What this run *does* establish: H1 (distillation) and H3 (classifier ≈ oracle, ≫ generic baselines) both hold.
+
+### 2.45 H2 — truncation does NOT transfer per-batch at the stable lr ⚠️ (2026-06-20)
+Per-batch Spearman ρ between truncated-T and the T=16 reference (k=32, 12 batches, lr=3e-5, each T scored in its own process — `scripts/h2_truncation.py`, since one process OOMs accumulating compiles across T):
+
+| T | 1 | 2 | 4 | 8 | 16 |
+|---|---|---|---|---|---|
+| ρ(T, T=16) | 0.055 | 0.039 | 0.033 | 0.213 | 1.0 |
+
+Short inner loops do **not** preserve the T=16 per-sequence ranking — ρ stays at noise level (n=32 null ≈ ±0.18) until T=8. **Why, and why it doesn't break MGD:** the per-round, per-sequence metagradient is low-SNR (within-batch good−corrupt gap is only ~0.005 raw, at every T). z-scoring is monotonic within a batch, so it preserves that noisy ranking — the strong labels (§2.3, d=+1.94) instead come from a *weak but consistent cluster-level bias* amplified by averaging over 3200 rounds. So MGD's selection power lives in the **averaged label**, not in any single short run's ranking. Honest implication: you can't shortcut labeling with very few inner steps at the stable lr, but you also don't need per-round ranking stability — coverage (more rounds) is the lever. (A true "short-vs-full" test would need a long reference T≫16, which OOMs here — see §2.1 / logits wall.)
 
 ### 2.4 H1 — the oracle distills into a cheap classifier ✓ (2026-06-20)
 LightGBM regressor over cheap features (base GPT-2 mean hidden state [768-d] + base-model loss), trained on 39,335 labeled seqs, tested on 9,833 held out:
@@ -106,7 +115,7 @@ An lr sweep (`scripts/diag_lr.py`, 30 rounds each, k=64/T=16) shows a sharp tran
 
   - **Numerical fidelity: ρ(s_xla, s_flashhog) = 0.9999** at L=128 — the bf16 higher-order kernel reproduces the float32 metagradient *ranking* essentially perfectly (and phi matches to 4 dp). This is the key safety result: swapping in flash-hog doesn't change the labels.
   - **Speed:** ~11% faster per round at L=128 (3.06 vs 3.45 s).
-  - **Memory — the honest finding:** flash-hog's largest allocation is ~13% lower (65 vs 75 GiB), but **it does NOT unlock L≥256 at k=64.** Reason (predicted up front): for GPT-2 the memory ceiling is set by the **LM-head logits `[k, L, vocab=50257]`** and the unrolled-trajectory carries, *not* attention. flash-hog only shrinks the O(L²) attention term, which for a 50k-vocab model stays below the O(L·vocab) logits term until L>vocab (≈50k) — unreachable. So on this workload flash-hog is a faithful, modestly-faster drop-in, but realizing its long-context memory benefit would require *also* cutting the logits cost (chunked/online-softmax cross-entropy). [small-k L-scaling A/B: see §2.1b once `flashhog_smallk.json` lands.]
+  - **Memory — the honest finding:** flash-hog's largest allocation is ~13% lower (65 vs 75 GiB), but **it does NOT unlock L≥256 at k=64.** Reason (predicted up front): for GPT-2 the memory ceiling is set by the **LM-head logits `[k, L, vocab=50257]`** and the unrolled-trajectory carries, *not* attention. flash-hog only shrinks the O(L²) attention term, which for a 50k-vocab model stays below the O(L·vocab) logits term until L>vocab (≈50k) — unreachable. So on this workload flash-hog is a faithful, modestly-faster drop-in, but realizing its long-context memory benefit would require *also* cutting the logits cost (chunked/online-softmax cross-entropy). **small-k L-scaling A/B (k=8):** even at k=8, every L≥256 OOMs for both backends, and flash-hog's failing allocation is a *constant* 57.98 GiB (vs XLA 69.23) across L∈{256,512,1024,2048} — i.e. the wall is **L- and attention-independent**, set by the val-logits + unrolled-trajectory buffers. flash-hog is reliably ~16% lower but cannot move a non-attention wall. Confirms the diagnosis.
 
 ### 2.0 Sanity checks
 - **Fresh-env rebuild verified** (2026-06-20): both venvs rebuilt from scratch on a clean container per `ENV.md` (jax-env: jax 0.10.2 + 8 GPUs; ai-env: torch 2.10.0+cu128, CUDA on 8 devices). Corpus regenerated identically (M=50000, V=2000, 12.8M tokens). Metagrad unit test re-PASSED in the rebuilt env (good +0.93 > corrupt −0.92).
