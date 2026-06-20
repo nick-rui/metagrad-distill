@@ -49,3 +49,6 @@ _(populated as experiments complete; newest first within each subsection)_
 
 ## 3. Notes, surprises, decisions
 - 2026-06-20: Project kickoff. Metagradients in JAX (per requirement); direct unrolled Adam since `T` is small (REPLAY reserved for scaling).
+- 2026-06-20: **Feasibility measured before running** (`FEASIBILITY.md`). One metagrad round (GPT-2 small, no block-remat): k=64, L_inner=128, T=16 → 52 GB peak (75 GB live under the platform allocator while streaming rounds), 3.24 s/round. Memory is dominated by the unrolled-trajectory carries (∝T), nearly flat in k; L_inner=256 and k≥96 OOM. Per-block remat fixed memory but made 2nd-order compile ~10 min → rejected; chosen lever is more (cheap) rounds at moderate k.
+- 2026-06-20: Chosen knobs — M=50k, T_seq=256, L_inner=128, k=64, T=16, coverage C=4, budget n=top-10% tokens (ablate 1/5/10/25%).
+- 2026-06-20: **Phase-1 labeling running** on all 8×H100 (3200 rounds total, ~22 min, wandb group `labeling-main`).
