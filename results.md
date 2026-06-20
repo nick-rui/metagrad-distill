@@ -22,7 +22,7 @@ Built an **all-in-domain** corpus (`mgd_hard`: all PubMed; clusters `clean` / `r
 1. **Distillation is robust even when surface cues mislead (✓ strong).** On `mgd_hard`, H1 ρ=**0.76**; the features-only classifier reproduces the oracle including assigning `noised` the lowest score (−0.95) *despite its 0.995 feature-cosine to target*. Downstream, classifier **+7.65 ≈ oracle +7.68** (99.6%).
 2. **Beats perplexity selection decisively; ties feature-similarity (honest).** `ppl_top` is *catastrophically* fooled — picks 100% `repetitive` and CPT **−53.9** (training on lowest-ppl data destroys the model), while MGD is robust. But `domain_match`/`ppl_corr` still **tie** MGD (~+7.7): whenever valuable data forms a *feature-identifiable* cluster, cheap feature matching finds it too. **MGD's value-add over feature-matching remains unproven** — it needs a corpus where value is *not* feature-aligned (redundancy / marginal-value structure).
 3. **Amortization works (✓).** A classifier trained on the *easy* corpus, applied to the *hard* corpus, selects 96.8% clean and gets **+7.58** (≈ native +7.65, oracle +7.68). The learned value-function transfers across corpora — "pay the oracle once, score elsewhere."
-4. **Soft weighting does NOT beat the hard cut (✗ for soft).** Using ŝ as a continuous per-sample weight (the oracle's literal form) at matched compute *underperforms* hard top-n: best soft +6.99 (sample, temp 0.6) vs hard **+7.65**; aggressive concentration (temp 0.1) overfits to **−88.8**. The hard include/exclude decision (uniform over a diverse top-n) is more robust than soft re-weighting here.
+4. **Weighting CAN match/beat the hard cut — if done right (✓, corrected).** Using ŝ for **relu-gated importance sampling** (zero below median, graded above) gives **+7.73**, edging the hard top-n cut (+7.65). But the form matters: *loss-weighting* uniform-sampled batches wastes compute on junk (+6.6), softmax-sampling overfits (−88.8 at low temp), and uniform full-corpus training (+6.84 ≈ random) shows you must concentrate. So "let the classifier weight each sample" works as **importance sampling**, not as naive per-sample loss weights (§2.9).
 
 ---
 
@@ -127,7 +127,18 @@ The oracle is defined w.r.t. a *continuous* weight `w_i`, so the "faithful" use 
 | sample, temp 0.2 | −16.0 | collapse |
 | sample, temp 0.1 | −88.8 | collapse (overfit to a few top-ŝ seqs) |
 
-**No soft variant beats hard top-n.** Peaked weighting (low temp) over-concentrates on a handful of highest-ŝ sequences → overfit → ppl *explodes*; softening toward uniform just approaches `random` (+6.56). The hard include/exclude decision — uniform training over a *diverse* top-n pool — is the more robust use of the score. So in this pipeline MGD **decides which samples to include**, and that beats trying to use ŝ as a graded weight.
+No *softmax*-based soft variant beats hard top-n: peaked weighting (low temp) over-concentrates on a handful of highest-ŝ sequences → overfit → ppl explodes; softening just approaches `random`.
+
+**But a better-designed weighting matches/edges the hard cut (corrected 2026-06-20).** Adding the missing baselines (uniform full-corpus training) and a relu-gated importance-sampling scheme:
+
+| scheme | improvement | note |
+|---|---|---|
+| **sample ∝ relu(ŝ)** (zero below median, graded above) | **+7.73** | ≈/edges hard +7.65 ✓ |
+| hard top-n cut | +7.65 | reference |
+| uniform full-corpus (no weighting) | +6.84 | ≈ random — you MUST concentrate |
+| loss-weight (relu / softmax t0.6), uniform sampling | +6.6 | wastes compute on ~0-weight junk |
+
+**Takeaways:** (1) *how* you apply the score dominates — **importance-sampling** ∝ a relu-gated score focuses compute like the hard cut but grades by magnitude and draws a more diverse positive set, matching/slightly beating it (+7.73). (2) **Loss-weighting** while sampling uniformly is the wrong move — most batches are near-zero-weight junk, so it underperforms (+6.6). (3) Uniform full-corpus training (+6.84 ≈ random) confirms concentration is essential. **Verdict: classifier-weighted gradient updates *can* be competitive with — even slightly better than — the hard include/exclude cut, but only via relu-gated importance sampling; the naive "weight every sample's loss" form loses.**
 
 ### 2.45 H2 — truncation does NOT transfer per-batch at the stable lr ⚠️ (2026-06-20)
 Per-batch Spearman ρ between truncated-T and the T=16 reference (k=32, 12 batches, lr=3e-5, each T scored in its own process — `scripts/h2_truncation.py`, since one process OOMs accumulating compiles across T):
