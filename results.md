@@ -93,6 +93,30 @@ Budget = top-10% of tokens (1.28M / 12.8M). CPT GPT-2 small on each method's sel
 
 ---
 
+## 2.15 Reducible-loss Φ fixes bias #2 — WITHOUT collapsing distillation (2026-06-21) ✓✓
+The §2.14 residual ("directional/horizon" bias — hard data helps the *hard val tail* fast)
+is attacked by re-targeting Φ: weight the held-out objective toward val content the base
+model already handles (the *reducible/learnable* part), down-weighting the irreducibly-hard
+tail. `Φ = Σ_x softmax(−base_loss(x)/temp)·L_after(x)` (`scripts/proto_redu.py`, on top of
+gradnorm). **Sweep de-biases monotonically** (k=8 diagnostic):
+
+| temp | easy | mid | hard | hard−mid |
+|---|---|---|---|---|
+| 10 (≈plain) | −0.317 | +0.042 | +0.290 | +0.248 |
+| 1.0 | −0.218 | +0.025 | +0.201 | +0.176 |
+| 0.5 | −0.119 | +0.011 | +0.110 | +0.098 |
+| 0.3 | −0.027 | +0.003 | +0.021 | +0.017 |
+
+— confirming bias #2's mechanism (the hard-lean *is* the hard-val-tail). **Full relabel**
+(gradnorm + reducible-Φ temp=0.3, subset 8000, 4× coverage):
+- **Oracle de-biased past neutral:** easy +0.054 ≈ mid +0.038 > **hard −0.085** — hard is now
+  *lowest*. Selection near-uniform (oracle 0.34/0.35/0.31; classifier 0.39/0.35/0.26 — no
+  hard over-pick).
+- **✓✓ Distillability PRESERVED: H1 ρ=0.347** — vs clip's collapse to 0.03. *This is the
+  key result:* reducible-Φ de-biases bias #2 by re-targeting (not by destroying loss
+  magnitude), so the labels stay learnable. The first lever to fix bias #2 while keeping H1.
+- **Downstream (multi-seed):** _pending_.
+
 ## 2.14 Per-example gradient normalization — the principled fix works (prototype, 2026-06-20) ✓
 The §2.13 levers (clip, pow) de-bias only by flattening *all* loss magnitudes. The principled
 alternative: normalize each example's gradient to **unit norm** inside the inner loop, so the
