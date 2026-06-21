@@ -1,0 +1,15 @@
+{
+  "temp": 1.0,
+  "k": 8,
+  "T": 16,
+  "n_rounds": 40,
+  "mean_phi": 3.3861,
+  "cluster_mean": {
+    "easy": -0.2180830811091578,
+    "mid": 0.02536183239271502,
+    "hard": 0.20111958108083888
+  },
+  "top_cluster": "hard",
+  "hard_minus_mid": 0.1758,
+  "spread": 0.4192
+}

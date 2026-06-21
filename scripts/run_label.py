@@ -20,6 +20,7 @@ def main():
     ap.add_argument("--loss_clip", type=float, default=0.0)
     ap.add_argument("--gradnorm", action="store_true")
     ap.add_argument("--subset", type=int, default=0)
+    ap.add_argument("--redu_temp", type=float, default=0.0)
     ap.add_argument("--data_dir", default="artifacts/data/mgd_v1")
     ap.add_argument("--tag", default="main")
     ap.add_argument("--n_gpus", type=int, default=8)
@@ -42,7 +43,8 @@ def main():
                "--n_rounds", str(per), "--k", str(args.k), "--T", str(args.T),
                "--lr", str(args.lr), "--L_inner", str(args.L_inner),
                "--val_bs", str(args.val_bs), "--seed", str(1000 + g),
-               "--loss_clip", str(args.loss_clip), "--subset", str(args.subset)]
+               "--loss_clip", str(args.loss_clip), "--subset", str(args.subset),
+               "--redu_temp", str(args.redu_temp)]
         if args.gradnorm:
             cmd += ["--gradnorm"]
         if args.wandb:

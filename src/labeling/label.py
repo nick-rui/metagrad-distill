@@ -22,8 +22,8 @@ def _save(out_path, sum_s, cnt, phis, meta, done_rounds):
 
 def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
               base="gpt2", wandb_run=None, log_every=10, ckpt_every=25, loss_clip=0.0,
-              gradnorm=False, subset=0):
-    import jax
+              gradnorm=False, subset=0, redu_temp=0.0):
+    import jax, jax.numpy as jnp
     from src.metagrad import model_gpt2 as M
     from src.metagrad.metagrad import metagrad_scores
 
@@ -33,6 +33,13 @@ def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
     M_total = tok.shape[0]
     n_pool = subset if subset > 0 else M_total              # restrict sampling to a subset (small-k coverage)
     params0, cfg = M.load_pretrained(base)
+    redu_vw = None
+    if redu_temp > 0:                                        # reducibility-weighted Φ (§2.15)
+        vL = (val[:val_bs, :L_inner] if L_inner else val[:val_bs]).astype(np.int32)
+        bl = np.asarray(jax.jit(lambda p, x: M.loss_per_example(p, x, cfg, False))(params0, jnp.asarray(vL)))
+        z = -bl / max(redu_temp, 1e-6); z -= z.max()
+        redu_vw = np.exp(z) / np.exp(z).sum()
+        print(f"[shard {seed}] reducible-Φ vw max={redu_vw.max():.3f} (temp={redu_temp})", flush=True)
     meta = dict(n_rounds=n_rounds, k=k, T=T, lr=lr, L_inner=L_inner,
                 val_bs=val_bs, seed=seed, base=base)
 
@@ -58,7 +65,8 @@ def run_shard(out_path, data_dir, n_rounds, k, T, lr, L_inner, val_bs, seed,
         idx = rng.choice(n_pool, size=k, replace=False)
         seqs = tok[idx].astype(np.int32)
         s, phi = metagrad_scores(params0, seqs, val, cfg, T=T, lr=lr,
-                                 val_bs=val_bs, L_inner=L_inner, loss_clip=loss_clip, gradnorm=gradnorm)
+                                 val_bs=val_bs, L_inner=L_inner, loss_clip=loss_clip,
+                                 gradnorm=gradnorm, redu_vw=redu_vw)
         z = (s - s.mean()) / (s.std() + 1e-8)         # within-round normalisation
         sum_s[idx] += z
         cnt[idx] += 1
@@ -119,6 +127,7 @@ if __name__ == "__main__":
     ap.add_argument("--loss_clip", type=float, default=0.0)
     ap.add_argument("--gradnorm", action="store_true")
     ap.add_argument("--subset", type=int, default=0)
+    ap.add_argument("--redu_temp", type=float, default=0.0)
     ap.add_argument("--wandb", action="store_true")
     ap.add_argument("--wandb_group", default=None)
     args = ap.parse_args()
@@ -129,6 +138,6 @@ if __name__ == "__main__":
                          name=f"label-shard{args.seed}", config=vars(args))
     run_shard(args.out_path, args.data_dir, args.n_rounds, args.k, args.T, args.lr,
               args.L_inner, args.val_bs, args.seed, wandb_run=run, loss_clip=args.loss_clip,
-              gradnorm=args.gradnorm, subset=args.subset)
+              gradnorm=args.gradnorm, subset=args.subset, redu_temp=args.redu_temp)
     if run is not None:
         run.finish()
