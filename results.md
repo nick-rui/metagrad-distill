@@ -115,7 +115,32 @@ gradnorm). **Sweep de-biases monotonically** (k=8 diagnostic):
 - **✓✓ Distillability PRESERVED: H1 ρ=0.347** — vs clip's collapse to 0.03. *This is the
   key result:* reducible-Φ de-biases bias #2 by re-targeting (not by destroying loss
   magnitude), so the labels stay learnable. The first lever to fix bias #2 while keeping H1.
-- **Downstream (multi-seed):** _pending_.
+- **Downstream (multi-seed, n=5):** oracle **+7.755 ± 0.017 ties random** (+7.767); but classifier
+  **+7.408 ± 0.023** (gap −0.359, sig) — *worse* than gradnorm-only. Reducible-Φ **over-corrected**:
+  it de-biased hard so far that oracle/classifier now slightly prefer **easy** (the worst cluster),
+  and the faithful classifier amplifies that easy-lean (39% easy) into a bad selection.
+
+### The punchline — why the classifier can't win on `mgd_diff` (the real lesson)
+Across *every* fix the classifier never ties random:
+
+| labels | classifier−random | classifier's bias |
+|---|---|---|
+| plain | −0.373 | over-picks hard |
+| gradnorm | −0.243 | over-picks hard |
+| reducible-Φ | −0.359 | over-picks easy |
+| loss-clip | −0.148 | ~none — **but only because H1 collapsed** (flat labels → random-ish pick) |
+
+**The dilemma:** on a *homogeneous-value* corpus (all clean PubMed — `random` is optimal because
+every sequence is ~equally useful), a classifier that *successfully distills any preference*
+necessarily **concentrates the selection suboptimally** and loses to random. The only way for the
+classifier to tie random is to **fail to distill** (flat labels, H1≈0). High-H1 ⟹ confident
+selection ⟹ worse-than-random; the two cannot be reconciled *on this corpus*. We chased the
+metagradient's hard-bias for many rounds, but the deeper truth is that **`mgd_diff` has no
+exploitable selection signal** — it was a clean *de-biasing* testbed, never a *value-add* testbed.
+**Demonstrating value-add fundamentally requires a heterogeneous-value corpus where selection
+genuinely beats random** (and, for an LM-loss Φ, that's exactly where value≈similarity makes the
+cheap baselines hard to beat — §2.7). That, not the metagradient's biases, is the binding
+constraint.
 
 ## 2.14 Per-example gradient normalization — the principled fix works (prototype, 2026-06-20) ✓
 The §2.13 levers (clip, pow) de-bias only by flattening *all* loss magnitudes. The principled
